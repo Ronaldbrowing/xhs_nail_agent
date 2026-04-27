@@ -8,7 +8,9 @@ from gpt_image2_generator import generate_image
 from case_library import (
     add_case,
     get_case_image_path,
+    get_case_metadata,
 )
+
 
 OUTPUT_DIR = Path.home() / ".hermes" / "agents" / "multi-agent-image" / "output"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -72,6 +74,80 @@ def _normalize_generation_result(raw):
 
     return normalized
 
+def build_dna_summary_from_case_meta(case_meta: dict) -> str:
+    """
+    从案例 metadata 自动生成可注入 prompt 的 DNA 摘要。
+
+    这个函数不依赖多模态模型，不读取图片本身；
+    它只使用历史案例保存下来的 brief、prompt、params、tags 等文本信息。
+    """
+    if not case_meta:
+        return None
+
+    brief = str(case_meta.get("brief") or "").strip()
+    prompt = str(case_meta.get("prompt") or "").strip()
+    if "【参考图DNA摘要】" in prompt:
+        prompt = prompt.split("【参考图DNA摘要】", 1)[0].strip()
+    params = case_meta.get("params") or {}
+    tags = case_meta.get("tags") or []
+    rating = case_meta.get("rating", 0)
+
+    text_pool = "\n".join([
+        brief,
+        prompt,
+        " ".join(str(tag) for tag in tags),
+    ])
+
+    style_hints = []
+
+    keyword_rules = [
+        ("清透", "清透感"),
+        ("透亮", "透亮质感"),
+        ("玻璃", "玻璃感"),
+        ("猫眼", "猫眼光泽"),
+        ("珠光", "珠光反射"),
+        ("渐变", "渐变过渡"),
+        ("蓝", "蓝色系"),
+        ("粉", "粉色系"),
+        ("裸", "裸色系"),
+        ("短甲", "短甲形态"),
+        ("长甲", "长甲形态"),
+        ("法式", "法式边缘设计"),
+        ("夏日", "夏日清爽氛围"),
+        ("小红书", "小红书封面风格"),
+        ("封面", "封面式构图"),
+        ("留白", "留白构图"),
+        ("高级", "高级感"),
+        ("极简", "极简风格"),
+        ("甜美", "甜美风格"),
+    ]
+
+    for keyword, label in keyword_rules:
+        if keyword in text_pool and label not in style_hints:
+            style_hints.append(label)
+
+    if not style_hints:
+        style_hints.append("历史案例中的视觉风格、构图逻辑和质感表达")
+
+    dna_parts = [
+        "请参考历史案例的视觉 DNA，但不要机械复制原图。",
+        f"历史案例主题：{brief[:160] if brief else '未记录'}",
+        f"风格关键词：{'、'.join(style_hints)}",
+        f"任务类型参考：{params.get('task', case_meta.get('task', 'poster'))}",
+        f"画面比例参考：{params.get('aspect', '未记录')}",
+        f"设计方向参考：{params.get('direction', '未记录')}",
+        f"历史评分参考：{rating}",
+        "继承重点：配色逻辑、材质质感、画面氛围、主体呈现方式、构图留白。",
+        "变化要求：根据当前新需求重新生成，不要一比一复刻历史案例。",
+    ]
+
+    if tags:
+        dna_parts.insert(4, f"案例标签：{'、'.join(str(tag) for tag in tags[:8])}")
+
+    if prompt:
+        dna_parts.append(f"历史 prompt 摘要：{prompt[:300]}")
+
+    return "\n".join(dna_parts)
 
 
 def log(role: str, emoji: str, message: str):
@@ -233,7 +309,7 @@ def step5_metadata(
         "model_usage": model_usage,
         "generation": generation,
         "quality_check": qa,
-        "dna_summary": dna_summary,
+        "dna_summary": effective_dna_summary,
     }
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -269,6 +345,8 @@ def run(
     prompt_analysis_mode = "unknown"
     style_params_mode = "unknown"
     forced_params_applied = False
+    effective_dna_summary = str(dna_summary).strip() if dna_summary else None
+    dna_summary_source = "user" if effective_dna_summary else None
 
     stage_status = {
         "prompt_ok": False,
@@ -359,13 +437,32 @@ def run(
     print()
 
     # DNA 轻量注入
-    if dna_summary:
-        brief = brief.rstrip() + "\n\n【参考图DNA摘要】\n" + str(dna_summary).strip()
+    if not effective_dna_summary and use_reference and case_id:
+        case_meta = get_case_metadata(case_id, final_task)
+        if case_meta:
+            effective_dna_summary = build_dna_summary_from_case_meta(case_meta)
+            dna_summary_source = "case_metadata"
+            if effective_dna_summary:
+                log(
+                    "案例库",
+                    "📚",
+                    f"已从案例 {case_id} 自动生成 DNA 摘要，长度={len(effective_dna_summary)}"
+                )
+        else:
+            log("案例库", "📚", f"⚠️ 案例 {case_id} 的 metadata 不存在，无法自动生成 DNA 摘要")
+
+    if effective_dna_summary:
+        brief = brief.rstrip() + "\n\n【参考图DNA摘要】\n" + effective_dna_summary
 
     # Step 3: 图片生成
     print(f"[FINAL PARAMS] task={final_task} direction={final_direction} aspect={final_aspect} quality={final_quality}")
-    if dna_summary:
-        print(f"[DNA] 已注入参考图摘要，长度={len(str(dna_summary))}")
+
+    if effective_dna_summary:   
+        print(
+            f"[DNA] 已注入参考图摘要，来源={dna_summary_source}, "
+            f"长度={len(effective_dna_summary)}"
+        )
+
 
     model_usage["image_generation_calls"] += 1
     generation = step3_image_generator(
@@ -390,11 +487,17 @@ def run(
                 "prompt_analysis_mode": prompt_analysis_mode,
                 "style_params_mode": style_params_mode,
                 "forced_params_applied": forced_params_applied,
+                "final_params": {
+                    "task": final_task,
+                    "direction": final_direction,
+                    "aspect": final_aspect,
+                    "quality": final_quality,
+                },
                 "stage_status": stage_status,
-                "model_usage": model_usage,
                 "precompiled_brief": precompiled_brief,
-                "dna_summary_included": bool(dna_summary),
-            },
+                "dna_summary_included": bool(effective_dna_summary),
+                "dna_summary_source": dna_summary_source,
+            }
         }
 
     stage_status["generation_ok"] = True
@@ -418,7 +521,8 @@ def run(
         },
         "stage_status": stage_status,
         "precompiled_brief": precompiled_brief,
-        "dna_summary_included": bool(dna_summary),
+        "dna_summary_included": bool(effective_dna_summary),
+        "dna_summary_source": dna_summary_source,
     }
 
     # Step 5: 档案
@@ -431,7 +535,7 @@ def run(
             qa,
             workflow_diagnostics=workflow_diagnostics,
             model_usage=model_usage,
-            dna_summary=dna_summary,
+            dna_summary=effective_dna_summary,
         )
         stage_status["archive_ok"] = True
     except Exception as e:
@@ -507,7 +611,8 @@ def run(
             "stage_status": stage_status,
             "model_usage": model_usage,
             "precompiled_brief": precompiled_brief,
-            "dna_summary_included": bool(dna_summary),
+            "dna_summary_included": bool(effective_dna_summary),
+            "dna_summary_source": dna_summary_source,
         },
         "partial_failure": not stage_status["archive_ok"] or not stage_status["case_library_ok"],
         "failed_stage": (
@@ -515,3 +620,32 @@ def run(
             else "archive_or_case_library"
         ),
     }
+
+def build_workflow_diagnostics(
+    prompt_analysis_mode,
+    style_params_mode,
+    forced_params_applied,
+    stage_status,
+    model_usage=None,
+    precompiled_brief=False,
+    final_params=None,
+    effective_dna_summary=None,
+    dna_summary_source=None,
+):
+    diagnostics = {
+        "prompt_analysis_mode": prompt_analysis_mode,
+        "style_params_mode": style_params_mode,
+        "forced_params_applied": forced_params_applied,
+        "stage_status": stage_status,
+        "precompiled_brief": precompiled_brief,
+        "dna_summary_included": bool(effective_dna_summary),
+        "dna_summary_source": dna_summary_source,
+    }
+
+    if model_usage is not None:
+        diagnostics["model_usage"] = model_usage
+
+    if final_params is not None:
+        diagnostics["final_params"] = final_params
+
+    return diagnostics

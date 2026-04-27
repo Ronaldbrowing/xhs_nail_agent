@@ -166,6 +166,44 @@ def get_case_image_path(case_id: str, task: str = None) -> str:
                         return str(img)
     return None
 
+def get_case_metadata(case_id: str, task: str = None) -> dict:
+    """
+    获取案例元数据
+
+    Args:
+        case_id: 案例编号，例如 "case_001"
+        task: 任务类型。如果已知任务类型，则只在该任务目录下查找。
+
+    Returns:
+        metadata.json 的内容；找不到则返回 None。
+    """
+    if task:
+        task_dirs = [CASE_LIBRARY_DIR / task]
+    else:
+        task_dirs = [
+            CASE_LIBRARY_DIR / t
+            for t in ["poster", "product", "ppt", "infographic", "teaching"]
+        ]
+
+    for task_dir in task_dirs:
+        if not task_dir.exists():
+            continue
+
+        for case_dir in task_dir.iterdir():
+            if not case_dir.is_dir():
+                continue
+
+            if case_dir.name.startswith(case_id):
+                meta_file = case_dir / "metadata.json"
+                if not meta_file.exists():
+                    return None
+
+                with open(meta_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+
+    return None
+
+
 def print_case_list(cases: list):
     """打印案例列表（美观格式）"""
     if not cases:
