@@ -1,0 +1,47 @@
+{
+  "style_id": "warning_before_after_nail_fail",
+  "style_name": "避雷翻车｜做前必看对比",
+  "scene_type": "warning",
+  "task": "poster",
+  "direction": "bold",
+  "aspect": "3:4",
+  "target_audience": "准备做美甲但怕翻车、预算敏感、想提前避坑的小红书用户",
+  "visual": {
+    "composition": "左右对比构图，左侧展示常见翻车问题，右侧展示正确效果，中间可留分隔线，上方保留标题区",
+    "hand_model": "同一亚洲黄皮手部，便于公平对比",
+    "nail_shape": "短甲或中短甲",
+    "nail_length": "短甲或中短甲",
+    "color_palette": ["失败高饱和色", "正确低饱和显白色"],
+    "finish": ["glossy", "cat-eye", "jelly"],
+    "decorations": ["少量装饰，重点突出差异"],
+    "background": "干净背景，避免干扰判断",
+    "lighting": "左右光线一致，突出对比",
+    "text_policy": "reserve_title_area",
+    "title_area": "顶部留标题区，可后期加做前必看类标题"
+  },
+  "copywriting": {
+    "title_formula": "千万别 + 错误行为 + 正确做法",
+    "opening_angle": "直接点出痛点，例如同样是猫眼美甲，为什么别人高级你显黑",
+    "body_structure": ["列出3个常见翻车点", "解释为什么会显黑显脏显廉价", "给出正确选择建议", "补充适合黄皮和短甲的替代方案"],
+    "comment_hooks": ["你踩过哪个坑", "评论区帮你看适不适合", "把你的翻车图发来我帮你分析"],
+    "cta": "做之前先收藏，少花冤枉钱"
+  },
+  "tags": {
+    "core_tags": ["#美甲避雷", "#美甲翻车", "#美甲分享", "#显白美甲", "#美甲推荐"],
+    "scene_tags": ["#黄皮美甲", "#短甲美甲", "#做美甲前必看"],
+    "element_tags": ["#猫眼美甲", "#腮红美甲", "#法式美甲"],
+    "skin_tone_tags": ["#黄黑皮美甲", "#显黑美甲避雷"]
+  },
+  "image_prompt": {
+    "positive_constraints": ["before and after comparison layout", "left side shows common nail fail", "right side shows improved nail design", "same hand skin tone for fair comparison", "clear contrast"],
+    "negative_constraints": ["no ugly or grotesque hand", "no medical nail disease", "no offensive body shaming", "no unreadable text"],
+    "must_show": ["左右对比", "错误示范", "正确示范", "同肤色手部", "明显差异"],
+    "avoid": ["过度丑化", "恐怖画面", "病甲表现", "低质拼图"]
+  },
+  "reference_policy": {
+    "dna_fields_to_use": ["subject", "composition", "dominant_colors", "finish_types", "decorations", "lighting"],
+    "inherit_strength": 0.5,
+    "allow_variation": ["left_side_fail", "right_side_fix", "colors"],
+    "must_preserve": ["composition", "main_visual_identity"]
+  }
+}

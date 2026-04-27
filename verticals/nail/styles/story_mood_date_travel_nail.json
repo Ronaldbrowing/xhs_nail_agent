@@ -1,0 +1,47 @@
+{
+  "style_id": "story_mood_date_travel_nail",
+  "style_name": "故事氛围｜约会旅行美甲",
+  "scene_type": "story",
+  "task": "poster",
+  "direction": "balanced",
+  "aspect": "3:4",
+  "target_audience": "喜欢氛围感、拍照打卡、约会旅行场景的小红书女性用户",
+  "visual": {
+    "composition": "单手或双手自然入镜，手拿咖啡、花束、贝壳、香水或包包，强调生活方式感，同时确保指甲清晰",
+    "hand_model": "自然亚洲黄皮手部，指节不过度修饰",
+    "nail_shape": "椭圆或圆方",
+    "nail_length": "短甲或中短甲",
+    "color_palette": ["裸粉", "奶茶", "浅蓝", "玫瑰粉", "香槟金"],
+    "finish": ["jelly", "glitter", "french", "gradient"],
+    "decorations": ["小花", "珍珠", "细闪", "贝壳感元素"],
+    "background": "咖啡店、海边、酒店床品、花束、阳光窗边",
+    "lighting": "柔和逆光或自然窗光，情绪感强",
+    "text_policy": "reserve_title_area",
+    "title_area": "画面边缘保留少量文案区，不影响氛围"
+  },
+  "copywriting": {
+    "title_formula": "场景 + 美甲 + 情绪句",
+    "opening_angle": "用生活片段开头，例如做完这款美甲，突然很想去海边",
+    "body_structure": ["描述场景和情绪", "解释为什么选这个颜色或元素", "补充适合的穿搭季节拍照场景", "轻柔引导收藏"],
+    "comment_hooks": ["适合约会吗", "适合旅行拍照吗", "要不要出同款合集"],
+    "cta": "喜欢这种氛围感可以收藏"
+  },
+  "tags": {
+    "core_tags": ["#美甲", "#氛围感美甲", "#美甲分享", "#美甲设计", "#显白美甲"],
+    "scene_tags": ["#约会美甲", "#旅行美甲", "#拍照美甲", "#夏日美甲"],
+    "element_tags": ["#法式美甲", "#腮红美甲", "#珍珠美甲"],
+    "skin_tone_tags": ["#黄皮美甲", "#温柔美甲"]
+  },
+  "image_prompt": {
+    "positive_constraints": ["lifestyle photography style", "natural hand pose", "nails clearly visible but integrated into scene", "soft emotional Xiaohongshu aesthetic", "high-end mood"],
+    "negative_constraints": ["no overly commercial product shot", "no cluttered background", "no nails too small to see", "no stiff hand pose"],
+    "must_show": ["美甲细节", "生活场景", "自然手势", "氛围光", "小红书封面感"],
+    "avoid": ["主体太远", "只拍场景看不到甲", "过度摆拍", "廉价滤镜"]
+  },
+  "reference_policy": {
+    "dna_fields_to_use": ["subject", "composition", "dominant_colors", "finish_types", "decorations", "background", "lighting"],
+    "inherit_strength": 0.65,
+    "allow_variation": ["props", "background", "secondary_colors"],
+    "must_preserve": ["mood", "main_visual_identity"]
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "style_id": "comparison_color_skin_tone_test",
+  "style_name": "对比测评｜色号显白横评",
+  "scene_type": "comparison",
+  "task": "poster",
+  "direction": "balanced",
+  "aspect": "3:4",
+  "target_audience": "纠结色号、肤色适配、想做前先看效果的小红书用户",
+  "visual": {
+    "composition": "三栏或四宫格对比，每栏展示一个色号或款式，手部角度一致，便于横向比较",
+    "hand_model": "同一亚洲黄皮手部",
+    "nail_shape": "统一短圆方",
+    "nail_length": "短甲",
+    "color_palette": ["蓝色", "裸粉", "奶茶", "红棕"],
+    "finish": ["jelly", "cat-eye", "glossy"],
+    "decorations": ["尽量少装饰，突出色号差异"],
+    "background": "统一纯色或浅色背景",
+    "lighting": "统一自然光，不要一格亮一格暗",
+    "text_policy": "reserve_title_area",
+    "title_area": "顶部保留标题，每格角落可以后期加色号编号"
+  },
+  "copywriting": {
+    "title_formula": "几个色号/款式 + 显白对比 + 结论",
+    "opening_angle": "先给结论，例如黄皮最显白的是第3个，不是最火的那个",
+    "body_structure": ["先说测试标准", "逐个评价色号或款式", "给出黄皮短甲通勤约会场景建议", "最后给出个人排序"],
+    "comment_hooks": ["你是哪种肤色", "想看哪个色号上手", "第几款最显白"],
+    "cta": "收藏起来，做美甲前直接对照"
+  },
+  "tags": {
+    "core_tags": ["#美甲测评", "#美甲对比", "#显白美甲", "#美甲推荐", "#美甲分享"],
+    "scene_tags": ["#黄皮美甲", "#短甲美甲", "#通勤美甲"],
+    "element_tags": ["#猫眼美甲", "#奶茶色美甲", "#红棕色美甲"],
+    "skin_tone_tags": ["#黄黑皮美甲", "#不挑皮美甲"]
+  },
+  "image_prompt": {
+    "positive_constraints": ["comparison grid layout", "same hand angle in every cell", "same lighting and background", "different nail colors clearly visible", "decision-making visual for Xiaohongshu"],
+    "negative_constraints": ["no inconsistent skin tones", "no chaotic collage", "no unreadable labels", "no too many decorations"],
+    "must_show": ["同角度对比", "不同色号", "显白差异", "统一手部", "统一背景"],
+    "avoid": ["每格风格完全不同", "肤色不一致", "光线不一致", "装饰遮盖颜色"]
+  },
+  "reference_policy": {
+    "dna_fields_to_use": ["subject", "composition", "dominant_colors", "finish_types", "decorations", "lighting"],
+    "inherit_strength": 0.6,
+    "allow_variation": ["colors", "grid_count", "background"],
+    "must_preserve": ["composition", "main_visual_identity"]
+  }
+}

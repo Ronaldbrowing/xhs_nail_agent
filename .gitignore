@@ -1,0 +1,50 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local env / secrets
+.env
+.env.*
+*.key
+*.pem
+
+# Generated outputs
+output/
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+
+# Local archive / generated metadata
+*_archive.json
+
+# Backup files
+*.bak
+*.bak_*
+*.backup
+*.old
+orchestrator_v2.py.bak*
+orchestrator_v2.py.syntaxfix_*
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
+
+# Optional generated case data
+case_library/images/
+case_library/*.json
+_local_backups/

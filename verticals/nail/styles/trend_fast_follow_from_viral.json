@@ -1,0 +1,47 @@
+{
+  "style_id": "trend_fast_follow_from_viral",
+  "style_name": "趋势快跟｜爆款元素复刻",
+  "scene_type": "trend_fast_follow",
+  "task": "poster",
+  "direction": "bold",
+  "aspect": "3:4",
+  "target_audience": "正在追热门款式、想要同款但有微创新的小红书用户",
+  "visual": {
+    "composition": "优先继承爆款参考图的构图，如果无参考图，则使用单手特写或2x3合集结构",
+    "hand_model": "根据爆款图DNA决定，但默认修正为亚洲黄皮自然手部",
+    "nail_shape": "继承参考图DNA",
+    "nail_length": "继承参考图DNA",
+    "color_palette": ["从参考图或爆款描述中提取"],
+    "finish": ["从参考图DNA提取"],
+    "decorations": ["从参考图DNA提取"],
+    "background": "继承60到80百分比的参考背景氛围，但避免完全照抄",
+    "lighting": "继承参考图的主光线风格",
+    "text_policy": "reserve_title_area",
+    "title_area": "根据参考图构图决定留白位置"
+  },
+  "copywriting": {
+    "title_formula": "爆款元素 + 人群/场景 + 微创新卖点",
+    "opening_angle": "承认趋势来源但强调自己的适配改造，例如最近刷到很多蓝色猫眼，我把它改成了更适合黄皮的低饱和版本",
+    "body_structure": ["说明参考的爆款元素", "说明自己改了什么", "说明适合谁", "补充色号价格肤色甲型信息", "引导用户评论想看哪种改法"],
+    "comment_hooks": ["想看原版还是显白版", "黄皮改法在正文", "要不要出同款合集"],
+    "cta": "想跟这个趋势的先收藏"
+  },
+  "tags": {
+    "core_tags": ["#美甲", "#爆款美甲", "#美甲分享", "#美甲设计", "#美甲推荐"],
+    "scene_tags": ["#小红书美甲", "#近期美甲", "#夏日美甲"],
+    "element_tags": ["#猫眼美甲", "#显白美甲", "#短甲美甲"],
+    "skin_tone_tags": ["#黄皮美甲", "#黄黑皮美甲"]
+  },
+  "image_prompt": {
+    "positive_constraints": ["inherit the viral nail design DNA", "keep main visual identity", "adapt for Xiaohongshu beauty cover", "make it more suitable for yellow-toned Asian skin", "clear nail details"],
+    "negative_constraints": ["do not copy exact watermark or text", "do not duplicate personal identifiable background", "do not distort hand", "do not lose the viral key element"],
+    "must_show": ["爆款核心元素", "清晰甲面", "小红书封面感", "微创新差异"],
+    "avoid": ["完全跑偏", "只保留颜色不保留结构", "照抄水印", "指甲细节消失"]
+  },
+  "reference_policy": {
+    "dna_fields_to_use": ["subject", "hand_model", "nail_shape", "nail_length", "dominant_colors", "finish_types", "decorations", "composition", "background", "lighting"],
+    "inherit_strength": 0.8,
+    "allow_variation": ["secondary_colors", "background", "decorations", "skin_tone_adaptation"],
+    "must_preserve": ["composition", "main_visual_identity", "dominant_colors", "finish_types"]
+  }
+}

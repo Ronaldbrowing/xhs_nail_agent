@@ -1,0 +1,47 @@
+{
+  "style_id": "single_seed_summer_cat_eye_short",
+  "style_name": "单款种草｜夏日猫眼短甲",
+  "scene_type": "single_seed",
+  "task": "poster",
+  "direction": "balanced",
+  "aspect": "3:4",
+  "target_audience": "小红书年轻女性，短甲用户，黄皮或黄黑皮用户，喜欢显白、清透、低饱和美甲的人群",
+  "visual": {
+    "composition": "单手45度角特写，手部自然微弯，指甲占画面核心区域，上方或侧上方保留干净标题留白",
+    "hand_model": "自然亚洲黄皮手部，不要过度磨皮，不要白到失真",
+    "nail_shape": "圆方形或短椭圆形",
+    "nail_length": "短甲",
+    "color_palette": ["低饱和蓝色", "冰透蓝", "浅粉", "奶白", "水光透明感"],
+    "finish": ["cat-eye", "jelly", "glossy", "fine-glitter"],
+    "decorations": ["玻璃珠", "小星星", "细闪", "少量波点"],
+    "background": "柔软毛衣、针织、浅色桌面或夏日清爽背景",
+    "lighting": "柔和自然光，突出猫眼反光和水光感",
+    "text_policy": "reserve_title_area",
+    "title_area": "画面上方20到30百分比保留干净留白，不直接生成文字"
+  },
+  "copywriting": {
+    "title_formula": "夏日 + 款式核心词 + 情绪表达",
+    "opening_angle": "用一句情绪化描述制造种草，例如这个颜色真的像把夏天冻在指尖",
+    "body_structure": ["先描述第一眼感觉", "再说明色号、元素、适合肤色", "补充是否适合短甲、本甲、通勤", "最后引导收藏或评论"],
+    "comment_hooks": ["色号在正文里", "黄黑皮可参考", "短甲也能做", "价格或自做店做可以在评论回复"],
+    "cta": "喜欢清透显白款的可以先收藏"
+  },
+  "tags": {
+    "core_tags": ["#美甲", "#美甲分享", "#美甲设计", "#显白美甲", "#短甲美甲"],
+    "scene_tags": ["#夏日美甲", "#夏天美甲", "#小短甲美甲"],
+    "element_tags": ["#猫眼美甲", "#玻璃珠美甲", "#蓝色美甲"],
+    "skin_tone_tags": ["#黄皮美甲", "#黄黑皮美甲"]
+  },
+  "image_prompt": {
+    "positive_constraints": ["nails must be clearly visible", "short nails and natural Asian yellow-toned hand", "cat-eye reflection must be visible", "glossy transparent jelly texture", "high-end Xiaohongshu beauty note cover style"],
+    "negative_constraints": ["no long acrylic nails", "no western white hand model", "no messy fingers", "no extra fingers", "no generated Chinese text unless explicitly allowed"],
+    "must_show": ["完整五指或至少四指", "猫眼光泽", "短甲形态", "清透显白效果"],
+    "avoid": ["长甲", "过饱和蓝", "廉价塑料感", "手部畸形", "文字乱码"]
+  },
+  "reference_policy": {
+    "dna_fields_to_use": ["subject", "hand_model", "nail_shape", "nail_length", "dominant_colors", "finish_types", "decorations", "composition", "background", "lighting"],
+    "inherit_strength": 0.7,
+    "allow_variation": ["background", "secondary_colors", "decorations"],
+    "must_preserve": ["nail_shape", "nail_length", "main_visual_identity"]
+  }
+}

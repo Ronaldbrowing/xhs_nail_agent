@@ -1,0 +1,47 @@
+{
+  "style_id": "tutorial_diy_step_by_step",
+  "style_name": "教程攻略｜DIY美甲步骤图",
+  "scene_type": "tutorial",
+  "task": "infographic",
+  "direction": "conservative",
+  "aspect": "3:4",
+  "target_audience": "想自己做美甲、预算有限、喜欢可复制教程的小红书用户",
+  "visual": {
+    "composition": "上半部分展示最终成品手部特写，下半部分展示3到4个步骤小卡片，结构清晰像教程封面",
+    "hand_model": "自然亚洲黄皮手部，短甲或中短甲",
+    "nail_shape": "短圆方或椭圆",
+    "nail_length": "短甲",
+    "color_palette": ["奶白", "裸粉", "浅蓝", "透明果冻色"],
+    "finish": ["jelly", "glossy", "fine-glitter"],
+    "decorations": ["小星星", "波点", "细闪", "简单贴纸"],
+    "background": "干净桌面，可出现甲油胶、磁铁、贴纸、镊子等工具",
+    "lighting": "明亮清晰，减少过度氛围化",
+    "text_policy": "reserve_title_area",
+    "title_area": "顶部留标题，步骤卡片可留空白占位，不让模型直接生成小字"
+  },
+  "copywriting": {
+    "title_formula": "新手/手残党 + 款式 + 几步搞定",
+    "opening_angle": "强调低门槛和可复刻",
+    "body_structure": ["工具清单", "步骤1打底", "步骤2上色或吸猫眼", "步骤3贴装饰和封层", "常见翻车点"],
+    "comment_hooks": ["要不要出详细视频", "色号放评论", "新手容易翻车的地方我写了"],
+    "cta": "先收藏，做之前照着检查"
+  },
+  "tags": {
+    "core_tags": ["#美甲教程", "#DIY美甲", "#美甲分享", "#新手美甲", "#美甲步骤"],
+    "scene_tags": ["#短甲美甲", "#夏日美甲", "#手残党美甲"],
+    "element_tags": ["#猫眼美甲", "#贴纸美甲", "#果冻美甲"],
+    "skin_tone_tags": ["#显白美甲", "#黄皮美甲"]
+  },
+  "image_prompt": {
+    "positive_constraints": ["tutorial infographic cover", "final nail look plus step preview cards", "clean layout", "tools visible but not cluttered", "clear nail details"],
+    "negative_constraints": ["no dense unreadable text", "no messy table", "no complicated nail art beyond beginner level", "no extra fingers"],
+    "must_show": ["成品图", "步骤预览区", "工具暗示", "短甲", "清晰结构"],
+    "avoid": ["纯氛围图", "步骤混乱", "文字乱码", "工具太多抢主体"]
+  },
+  "reference_policy": {
+    "dna_fields_to_use": ["subject", "composition", "nail_shape", "nail_length", "dominant_colors", "finish_types", "decorations"],
+    "inherit_strength": 0.55,
+    "allow_variation": ["step_layout", "tools", "background"],
+    "must_preserve": ["main_visual_identity", "nail_shape"]
+  }
+}

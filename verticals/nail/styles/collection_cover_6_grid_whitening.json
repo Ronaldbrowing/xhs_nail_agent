@@ -1,0 +1,47 @@
+{
+  "style_id": "collection_cover_6_grid_whitening",
+  "style_name": "合集封面｜6款黄皮显白美甲",
+  "scene_type": "collection_cover",
+  "task": "poster",
+  "direction": "bold",
+  "aspect": "3:4",
+  "target_audience": "黄皮、黄黑皮、小红书美甲收藏用户，想一次性找多款参考图的人群",
+  "visual": {
+    "composition": "上方三分之一保留标题区，下方2行3列网格，每格展示一款不同色系美甲，整齐、清晰、信息密度高",
+    "hand_model": "统一亚洲黄皮手部，不同格子手势可略有变化但风格一致",
+    "nail_shape": "短甲或中短甲为主，可混合圆方、椭圆",
+    "nail_length": "短甲和中短甲",
+    "color_palette": ["安可拉红", "冰透蓝", "燕麦奶茶", "焦糖琥珀", "裸粉腮红", "摩卡棕"],
+    "finish": ["cat-eye", "jelly", "glitter", "french", "gradient"],
+    "decorations": ["星星", "小珍珠", "波点", "细线条", "小花"],
+    "background": "统一浅色背景或每格轻微差异化背景",
+    "lighting": "统一柔和自然光，避免每格光线割裂",
+    "text_policy": "reserve_title_area",
+    "title_area": "顶部留出大标题区域，可后期加字"
+  },
+  "copywriting": {
+    "title_formula": "数字 + 人群 + 效果 + 品类",
+    "opening_angle": "先告诉用户这是可直接收藏给美甲师看的合集",
+    "body_structure": ["一句话说明合集主题", "按1到6编号解释每款适合的人群和场景", "补充黄皮、短甲、通勤适配建议", "最后引导收藏和评论区选款"],
+    "comment_hooks": ["你最想做第几款", "黄皮闭眼选哪款", "短甲更推荐哪款", "要不要出教程"],
+    "cta": "直接收藏，下次做美甲给美甲师看"
+  },
+  "tags": {
+    "core_tags": ["#美甲", "#美甲合集", "#美甲推荐", "#美甲设计", "#显白美甲"],
+    "scene_tags": ["#黄皮美甲", "#短甲美甲", "#春夏美甲", "#秋冬美甲"],
+    "element_tags": ["#猫眼美甲", "#腮红美甲", "#奶茶色美甲"],
+    "skin_tone_tags": ["#黄黑皮美甲", "#不挑皮美甲"]
+  },
+  "image_prompt": {
+    "positive_constraints": ["2 by 3 grid layout", "six clearly different nail designs", "each cell shows one complete nail style", "consistent Xiaohongshu cover design", "clean top title area"],
+    "negative_constraints": ["no single hero hand only", "no three hands overlapping", "no same color repeated in all cells", "no chaotic collage", "no unreadable generated text"],
+    "must_show": ["六款不同美甲", "2x3网格", "黄皮手部", "显白对比感", "顶部留白"],
+    "avoid": ["单一色系通篇", "三只手叠加", "白皮模特", "网格错乱", "指甲看不清"]
+  },
+  "reference_policy": {
+    "dna_fields_to_use": ["subject", "composition", "dominant_colors", "finish_types", "decorations", "background", "lighting"],
+    "inherit_strength": 0.6,
+    "allow_variation": ["colors", "decorations", "background"],
+    "must_preserve": ["composition", "main_visual_identity"]
+  }
+}
