@@ -309,7 +309,7 @@ def step5_metadata(
         "model_usage": model_usage,
         "generation": generation,
         "quality_check": qa,
-        "dna_summary": effective_dna_summary,
+        "dna_summary": dna_summary,
     }
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
