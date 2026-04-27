@@ -620,32 +620,3 @@ def run(
             else "archive_or_case_library"
         ),
     }
-
-def build_workflow_diagnostics(
-    prompt_analysis_mode,
-    style_params_mode,
-    forced_params_applied,
-    stage_status,
-    model_usage=None,
-    precompiled_brief=False,
-    final_params=None,
-    effective_dna_summary=None,
-    dna_summary_source=None,
-):
-    diagnostics = {
-        "prompt_analysis_mode": prompt_analysis_mode,
-        "style_params_mode": style_params_mode,
-        "forced_params_applied": forced_params_applied,
-        "stage_status": stage_status,
-        "precompiled_brief": precompiled_brief,
-        "dna_summary_included": bool(effective_dna_summary),
-        "dna_summary_source": dna_summary_source,
-    }
-
-    if model_usage is not None:
-        diagnostics["model_usage"] = model_usage
-
-    if final_params is not None:
-        diagnostics["final_params"] = final_params
-
-    return diagnostics
