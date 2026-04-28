@@ -78,7 +78,7 @@ def archive_reference_image(
             thumbnail_path=None,
             filename=None,
             exists=False,
-            source_type=source_type,
+            source_type="local_path",
             source_value=source_value or original_path_rel,
             source_task=source_task,
             influence_scope=influence_scope,

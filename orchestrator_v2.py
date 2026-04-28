@@ -226,6 +226,9 @@ def step3_image_generator(
     aspect: str,
     quality: str,
     reference_image: str = None,
+    reference_source_type: str = None,
+    reference_source_value: str = None,
+    reference_source_task: str = None,
 ) -> dict:
     log("图片生成引擎", "🖼️", "启动设计编译 + 图片生成...")
     log("图片生成引擎", "🖼️", "   ① 调用内置编译器生成 Prompt...")
@@ -269,9 +272,9 @@ def step3_image_generator(
                 resolution="1k",
             )
             used_reference = True
-            ref_source_type = "local_path"
-            ref_source_value = to_project_relative(reference_image)
-            ref_source_task = task
+            ref_source_type = reference_source_type or "local_path"
+            ref_source_value = reference_source_value or to_project_relative(reference_image)
+            ref_source_task = reference_source_task or task
         except Exception as e:
             log("图片生成引擎", "🖼️", f"   ⚠️ 图生图失败，回退到纯文生图: {e}")
             fallback_reason = f"img2img_failed: {e}"
@@ -459,6 +462,8 @@ def step5_metadata(
     # Determine generation mode
     gen_mode = "image_to_image" if gen_used_ref else "text_to_image"
 
+    page_used_reference = bool(gen_used_ref and ref_asset and ref_asset.get("enabled"))
+
     pages.append({
         "page_id": "page_01",
         "page_index": 1,
@@ -477,8 +482,8 @@ def step5_metadata(
             "file_size": gen_asset.get("file_size", 0) if gen_asset else 0,
             "sha256": gen_asset.get("sha256", "") if gen_asset else "",
         },
-        "reference_ids": ["ref_001"] if gen_used_ref and ref_asset else [],
-        "used_reference": gen_used_ref,
+        "reference_ids": ["ref_001"] if page_used_reference else [],
+        "used_reference": page_used_reference,
         "prompt": {
             "visual_brief": None,
             "final_prompt": generation.get("final_prompt", ""),
@@ -590,7 +595,7 @@ def step5_metadata(
             page_count=1,
             cover_image_path=pages[0]["image"]["path"] if pages else None,
             reference_thumbnail_path=ref_thumb_path,
-            used_reference=generation.get("used_reference", False),
+            used_reference=page_used_reference,
             overall_score=qa.get("score", 0),
             package_path=to_project_relative(record_dir / "note_package.json"),
             search_text=search_text,
@@ -704,6 +709,9 @@ def run(
 
     # 案例库 / 参考图
     reference_image = None
+    ref_src_type = None
+    ref_src_value = None
+    ref_src_task = None
     if use_reference and case_id:
         # Try get_case_image_path first
         reference_image = get_case_image_path(case_id, final_task)
@@ -712,9 +720,16 @@ def run(
             reference_image = try_resolve_case_image_path(case_id, final_task)
         if reference_image:
             ref_path = resolve_project_path(reference_image)
+            ref_src_type = "case_id"
+            ref_src_value = case_id
+            ref_src_task = final_task
             log("案例库", "📚", f"使用指定案例: {case_id} → {ref_path.name}")
         else:
-            log("案例库", "📚", f"⚠️ 案例 {case_id} 不存在，将全新生成")
+            ref_path = None
+            ref_src_type = "case_id"
+            ref_src_value = case_id
+            ref_src_task = final_task
+            log("案例库", "📚", f"⚠️ 案例 {case_id} 不存在，标记为无效参考图")
     elif use_reference:
         reference_image = None
         log("案例库", "📚", "当前版本未启用自动选案例，改为全新生成")
@@ -758,17 +773,21 @@ def run(
         aspect=final_aspect,
         quality=final_quality,
         reference_image=reference_image,
+        reference_source_type=ref_src_type if reference_image else None,
+        reference_source_value=ref_src_value if reference_image else None,
+        reference_source_task=ref_src_task if reference_image else None,
     )
     print()
 
     if generation.get("status") != "success":
         print("=" * 70)
-        print("❌ 生成失败，仍写入归档记录")
+        print("❌ 生成失败，写入归档记录后返回")
         print("=" * 70)
         failed_qa = {"verdict": "FAIL", "score": 0.0, "approval": False}
-        # Still call step5_metadata so the failed run gets a record_dir
+        failed_meta_path = None
         try:
-            step5_metadata(
+            stage_status["generation_ok"] = False
+            failed_meta_path = step5_metadata(
                 user_input=user_input,
                 prompt_data=prompt_data,
                 style_data=style_data,
@@ -796,6 +815,30 @@ def run(
             )
         except Exception as e:
             print(f"[WARN] Failed to write failure archive: {e}")
+
+        return {
+            "success": False,
+            "stage": "generation",
+            "error": generation.get("error"),
+            "filepath": None,
+            "used_reference": generation.get("used_reference", False),
+            "archive_path": failed_meta_path,
+            "workflow_diagnostics": {
+                "prompt_analysis_mode": prompt_analysis_mode,
+                "style_params_mode": style_params_mode,
+                "forced_params_applied": forced_params_applied,
+                "final_params": {
+                    "task": final_task,
+                    "direction": final_direction,
+                    "aspect": final_aspect,
+                    "quality": final_quality,
+                },
+                "stage_status": stage_status,
+                "precompiled_brief": precompiled_brief,
+                "dna_summary_included": bool(effective_dna_summary),
+                "dna_summary_source": dna_summary_source,
+            },
+        }
 
     stage_status["generation_ok"] = True
     model_usage["image_generation_succeeded"] += 1
