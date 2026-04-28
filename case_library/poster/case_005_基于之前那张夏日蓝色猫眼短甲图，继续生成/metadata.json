@@ -1,0 +1,16 @@
+{
+  "case_id": "case_005",
+  "task": "poster",
+  "created_at": "2026-04-27T19:25:15.049305",
+  "image_path": "case_library/poster/case_005_基于之前那张夏日蓝色猫眼短甲图，继续生成/image.png",
+  "brief": "基于之前那张夏日蓝色猫眼短甲图，继续生成一张同风格的小红书封面，保持短甲、清透冰蓝、猫眼光泽、水波纹高光、上方留白，不要文字。",
+  "prompt": "Create a poster image for poster aimed at broad professional audience. Treat this as a design-led visual solving this brief: 基于之前那张夏日蓝色猫眼短甲图，继续生成一张同风格的小红书封面，保持短甲、清透冰蓝、猫眼光泽、水波纹高光、上方留白，不要文字。. Communication goal: attract and persuade quickly in a campaign or recruitment context. Translate the brief into one strong hero concept rather than many equal-weight elements. Brand and context strategy: no explicit brand provided; commit to one coherent visual system instead of averaging styles. Visual system: base mode: editorial campaign key visual; direction bias: premium editorial, contemporary, polished, commercially strong; energy bias: energetic but disciplined, confident, professional; composition bias: clear hierarchy, dynamic but stable layout, deliberate focal contrast; palette bias: premium neutrals with one strong accent family. Hierarchy: one clear hero idea; one dominant hero visual or symbolic concept, never a collage of equal-weight objects; secondary elements must support the hero rather than compete with it; background should create rhythm, not narrative confusion. Composition: clear hierarchy, dynamic but stable layout, deliberate focal contrast. Safe zone: reserve a clean, obvious text-safe zone in the upper third or one side for headline and CTA copy. Lighting: crisp premium lighting with controlled contrast and energetic highlights. Color strategy: restricted premium palette with disciplined neutrals and one energetic accent family. Detail density: hero-detail emphasis with a restrained background; hero-rich detail with restrained background complexity. Style direction: base mode: editorial campaign key visual; direction bias: premium editorial, contemporary, polished, commercially strong; energy bias: energetic but disciplined, confident, professional; composition bias: clear hierarchy, dynamic but stable layout, deliberate focal contrast; palette bias: premium neutrals with one strong accent family. Mood: energetic but disciplined, confident, professional. Aspect ratio: 3:4. Important constraints: make the result feel campaign-ready rather than generic AI art; prioritize focal hierarchy and typography-safe composition. Avoid: avoid generic AI clutter; avoid random floating UI fragments or HUD overlays; avoid generic gradient fog with no composition logic; avoid cheap neon cyberpunk treatment unless explicitly requested; avoid noisy micro-detail that weakens the hierarchy; poster text rendered directly into the image unless explicitly requested; random marketing icons and decorative interface fragments. Emphasize strong hierarchy, intentional whitespace, disciplined background complexity, and polished professional finish.",
+  "params": {
+    "task": "poster",
+    "direction": "balanced",
+    "aspect": "3:4",
+    "quality": "final"
+  },
+  "tags": [],
+  "rating": 9.0
+}
