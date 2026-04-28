@@ -354,15 +354,15 @@
    - references[0].archived_path 指向 output/records/ 下的归档副本
    - used_reference == true
 
-33. 最小验收命令四：失败参考图
+33. 最小验收命令四：无效参考图（fallback 到文生图）
 
-运行一个不存在的 reference_image，验证：
-   - 不应错误标记 used_reference=true
-   - reference.exists == false
-   - diagnostics.reference_ok == false
-   - workflow_trace 中记录 reference_archive 或 reference_validation 失败
-   - 如果流程允许 fallback 到文生图，必须记录 fallback_reason
-   - 如果流程不允许 fallback，则 status=failed，并保存失败 archive
+运行一个传入但无效的 reference_image，验证：
+   - used_reference=false（不错误标记为 true）
+   - 如走 fallback 到文生图：status=success，generation.mode=text_to_image
+   - 如走直接失败：status=failed，references=[]，workflow_trace 记录 failed_stage
+   - diagnostics.reference_ok == false 或 workflow_trace 中有 reference warning
+   - fallback_reason 必须记录（如 "reference_image_not_found"）
+   - 不允许错误标记 used_reference=true
 
 34. grep 审计：
    执行：
