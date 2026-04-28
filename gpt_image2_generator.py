@@ -11,6 +11,8 @@ import requests
 from datetime import datetime
 from pathlib import Path
 
+from project_paths import OUTPUT_DIR
+
 API_BASE = "https://api.apimart.ai/v1"
 
 def require_api_key(api_key: str = None) -> str:
@@ -163,7 +165,7 @@ def generate_image(prompt: str, size: str = "1:1", save_dir: str = None,
         dict: 完整的生成结果
     """
     if save_dir is None:
-        save_dir = os.path.expanduser("~/.hermes/agents/multi-agent-image/output")
+        save_dir = str(OUTPUT_DIR)
 
     os.makedirs(save_dir, exist_ok=True)
     api_key = require_api_key(api_key)

@@ -3,17 +3,26 @@ from datetime import datetime
 import json
 import os
 
+from project_paths import (
+    PROJECT_ROOT,
+    OUTPUT_DIR,
+    CASE_LIBRARY_DIR,
+    ensure_project_dirs,
+    to_project_relative,
+    resolve_project_path,
+)
 from design_compiler import compile_prompt_package
 from gpt_image2_generator import generate_image
+from apimart_image_url_generator import generate_image_with_reference
 from case_library import (
     add_case,
     get_case_image_path,
     get_case_metadata,
 )
+from case_reference_resolver import try_resolve_case_image_path
 
-
-OUTPUT_DIR = Path.home() / ".hermes" / "agents" / "multi-agent-image" / "output"
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+# Ensure project directories exist at module load
+ensure_project_dirs()
 
 
 def _normalize_generation_result(raw):
@@ -71,6 +80,9 @@ def _normalize_generation_result(raw):
     normalized["filepath"] = filepath
     normalized["url"] = url
     normalized["raw"] = raw
+    # Preserve used_reference if already set
+    if "used_reference" in raw:
+        normalized["used_reference"] = raw["used_reference"]
 
     return normalized
 
@@ -227,14 +239,44 @@ def step3_image_generator(
     log("图片生成引擎", "🖼️", f"   ✅ Prompt 编译完成 ({len(final_prompt)} 字符)")
     log("图片生成引擎", "🖼️", "   ② 调用 GPT-Image-2 API...")
 
-    save_dir = str(OUTPUT_DIR)
+    # Check if reference image is provided and exists
+    resolved_reference_path = None
+    if reference_image:
+        resolved_reference_path = resolve_project_path(reference_image)
+        if not resolved_reference_path.exists():
+            log("图片生成引擎", "🖼️", f"   ⚠️ 参考图不存在: {resolved_reference_path}，回退到纯文生图")
+            resolved_reference_path = None
 
-    raw_gen = generate_image(
-        prompt=final_prompt,
-        size=aspect,
-        save_dir=save_dir,
-    )
+    used_reference = False
 
+    if resolved_reference_path and resolved_reference_path.exists():
+        # --- 图生图分支 ---
+        log("图片生成引擎", "🖼️", f"🔗 检测到本地参考图，启用图生图模式：{resolved_reference_path.name}")
+        try:
+            raw_gen = generate_image_with_reference(
+                prompt=final_prompt,
+                reference_image_path=str(resolved_reference_path),
+                size=aspect,
+                resolution="1k",
+            )
+            used_reference = True
+        except Exception as e:
+            log("图片生成引擎", "🖼️", f"   ⚠️ 图生图失败，回退到纯文生图: {e}")
+            raw_gen = generate_image(
+                prompt=final_prompt,
+                size=aspect,
+                save_dir=str(OUTPUT_DIR),
+            )
+            used_reference = False
+    else:
+        # --- 纯文生图分支 ---
+        raw_gen = generate_image(
+            prompt=final_prompt,
+            size=aspect,
+            save_dir=str(OUTPUT_DIR),
+        )
+
+    # normalize and add used_reference from actual generation result
     gen = _normalize_generation_result(raw_gen)
 
     if not gen.get("success"):
@@ -248,6 +290,7 @@ def step3_image_generator(
                 "aspect": aspect,
                 "quality": quality,
             },
+            "used_reference": used_reference,
         }
 
     result = {
@@ -262,7 +305,7 @@ def step3_image_generator(
             "aspect": aspect,
             "quality": quality,
         },
-        "used_reference": bool(reference_image),
+        "used_reference": gen.get("used_reference", used_reference),
     }
 
     if "actual_time" in gen:
@@ -300,6 +343,11 @@ def step5_metadata(
     workflow_diagnostics = workflow_diagnostics or {}
     model_usage = model_usage or {}
 
+    # Normalize generation.filepath to project-relative for the archive
+    normalized_gen = dict(generation)
+    if generation.get("filepath"):
+        normalized_gen["filepath"] = to_project_relative(generation["filepath"])
+
     archive = {
         "timestamp": datetime.now().isoformat(),
         "user_input": user_input,
@@ -307,7 +355,7 @@ def step5_metadata(
         "style_params": style_data,
         "workflow_diagnostics": workflow_diagnostics,
         "model_usage": model_usage,
-        "generation": generation,
+        "generation": normalized_gen,
         "quality_check": qa,
         "dna_summary": dna_summary,
     }
@@ -318,7 +366,7 @@ def step5_metadata(
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(archive, f, indent=2, ensure_ascii=False)
 
-    log("档案管理员", "📁", f"   ✅ {meta_path.name}")
+    log("档案管理员", "📁", f"   ✅ {to_project_relative(meta_path)}")
     return str(meta_path)
 
 
@@ -424,9 +472,14 @@ def run(
     # 案例库 / 参考图
     reference_image = None
     if use_reference and case_id:
+        # Try get_case_image_path first
         reference_image = get_case_image_path(case_id, final_task)
+        if not reference_image:
+            # Fallback to case_reference_resolver
+            reference_image = try_resolve_case_image_path(case_id, final_task)
         if reference_image:
-            log("案例库", "📚", f"使用指定案例: {case_id} → {Path(reference_image).name}")
+            ref_path = resolve_project_path(reference_image)
+            log("案例库", "📚", f"使用指定案例: {case_id} → {ref_path.name}")
         else:
             log("案例库", "📚", f"⚠️ 案例 {case_id} 不存在，将全新生成")
     elif use_reference:
@@ -457,7 +510,7 @@ def run(
     # Step 3: 图片生成
     print(f"[FINAL PARAMS] task={final_task} direction={final_direction} aspect={final_aspect} quality={final_quality}")
 
-    if effective_dna_summary:   
+    if effective_dna_summary:
         print(
             f"[DNA] 已注入参考图摘要，来源={dna_summary_source}, "
             f"长度={len(effective_dna_summary)}"
@@ -525,8 +578,9 @@ def run(
         "dna_summary_source": dna_summary_source,
     }
 
-    # Step 5: 档案
+    # Step 5: 档案（先设置 stage_ok，再写入 archive）
     try:
+        stage_status["archive_ok"] = True
         meta_path = step5_metadata(
             user_input,
             prompt_data,
@@ -537,8 +591,8 @@ def run(
             model_usage=model_usage,
             dna_summary=effective_dna_summary,
         )
-        stage_status["archive_ok"] = True
     except Exception as e:
+        stage_status["archive_ok"] = False
         meta_path = None
         print(f"[WARN] archive failed: {e}")
     print()
@@ -570,10 +624,16 @@ def run(
     print("=" * 70)
     print("✅ 任务完成!")
     print("=" * 70)
+
+    # Return relative filepath for display
+    result_filepath = generation["filepath"]
+    if result_filepath:
+        result_filepath = to_project_relative(result_filepath)
+
     print("📁 文件:")
-    print(f"   🖼️  图片: {generation['filepath']}")
+    print(f"   🖼️  图片: {result_filepath}")
     if meta_path:
-        print(f"   📝 档案: {meta_path}")
+        print(f"   📝 档案: {to_project_relative(meta_path)}")
     else:
         print(f"   📝 档案: 未成功写入")
     print("📊 质量:")
@@ -594,7 +654,7 @@ def run(
 
     return {
         "success": True,
-        "filepath": generation["filepath"],
+        "filepath": result_filepath,
         "url": generation.get("url"),
         "score": qa.get("score"),
         "params": {
@@ -603,7 +663,7 @@ def run(
             "aspect": final_aspect,
             "quality": final_quality,
         },
-        "used_reference": bool(reference_image),
+        "used_reference": generation.get("used_reference", False),
         "workflow_diagnostics": {
             "prompt_analysis_mode": prompt_analysis_mode,
             "style_params_mode": style_params_mode,

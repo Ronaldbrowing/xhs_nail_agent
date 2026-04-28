@@ -8,13 +8,12 @@
 3. 选择案例作为参考图，进行风格迁移（图生图）
 4. 支持案例打标签、评分、搜索
 
-案例库路径：
-/root/.hermes/agents/multi-agent-image/case_library/
+案例库路径：<PROJECT_ROOT>/case_library/
 ├── poster/
-│   ├── case_001_赛博朋克海报/
+│   ├── case_001_xxx/
 │   │   ├── image.png
 │   │   └── metadata.json
-│   └── case_002_AI训练营海报/
+│   └── case_002_xxx/
 │       ├── image.png
 │       └── metadata.json
 ├── product/
@@ -30,16 +29,21 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 
-AGENCY_DIR = Path.home() / ".hermes/agents/multi-agent-image"
-CASE_LIBRARY_DIR = AGENCY_DIR / "case_library"
-CASE_LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
+from project_paths import CASE_LIBRARY_DIR, to_project_relative, resolve_project_path
 
-# 为每种任务类型创建目录
-for task in ["poster", "product", "ppt", "infographic", "teaching"]:
-    (CASE_LIBRARY_DIR / task).mkdir(exist_ok=True)
+
+def ensure_dirs():
+    CASE_LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
+    for task in ["poster", "product", "ppt", "infographic", "teaching"]:
+        (CASE_LIBRARY_DIR / task).mkdir(exist_ok=True)
+
+
+ensure_dirs()
+
 
 def log(msg):
     print(f"[案例库] {msg}")
+
 
 def add_case(image_path: str, metadata: dict, task: str = "poster", tags: list = None) -> str:
     """
@@ -56,26 +60,29 @@ def add_case(image_path: str, metadata: dict, task: str = "poster", tags: list =
     """
     task_dir = CASE_LIBRARY_DIR / task
 
-    # 生成案例编号
+    # Generate case number
     existing = [d for d in task_dir.iterdir() if d.is_dir()]
     case_num = len(existing) + 1
     case_id = f"case_{case_num:03d}"
 
-    # 创建案例目录
+    # Create case directory
     case_dir = task_dir / f"{case_id}_{metadata.get('brief', 'untitled')[:20]}"
     case_dir.mkdir(exist_ok=True)
 
-    # 复制图片
-    ext = Path(image_path).suffix
+    # Copy image
+    ext = Path(image_path).suffix or ".png"
     target_image = case_dir / f"image{ext}"
-    shutil.copy2(image_path, target_image)
 
-    # 保存元数据
+    # Resolve absolute path before copying
+    src_path = resolve_project_path(image_path)
+    shutil.copy2(src_path, target_image)
+
+    # Save metadata with relative image_path
     case_meta = {
         "case_id": case_id,
         "task": task,
         "created_at": datetime.now().isoformat(),
-        "image_path": str(target_image),
+        "image_path": to_project_relative(target_image),
         "brief": metadata.get("brief", ""),
         "prompt": metadata.get("prompt", ""),
         "params": metadata.get("params", {}),
@@ -88,6 +95,7 @@ def add_case(image_path: str, metadata: dict, task: str = "poster", tags: list =
 
     log(f"✅ 案例已保存: {case_dir.name}")
     return case_id
+
 
 def list_cases(task: str = None) -> list:
     """
@@ -121,6 +129,7 @@ def list_cases(task: str = None) -> list:
 
     return cases
 
+
 def search_cases(keyword: str, task: str = None) -> list:
     """搜索案例（按关键词匹配 brief、prompt、tags）"""
     all_cases = list_cases(task)
@@ -138,6 +147,7 @@ def search_cases(keyword: str, task: str = None) -> list:
             results.append(case)
 
     return results
+
 
 def get_case_image_path(case_id: str, task: str = None) -> str:
     """
@@ -160,11 +170,13 @@ def get_case_image_path(case_id: str, task: str = None) -> str:
             continue
         for case_dir in task_dir.iterdir():
             if case_dir.name.startswith(case_id):
+                # Look for image file directly in case directory
                 for ext in [".png", ".jpg", ".jpeg", ".webp"]:
                     img = case_dir / f"image{ext}"
                     if img.exists():
                         return str(img)
     return None
+
 
 def get_case_metadata(case_id: str, task: str = None) -> dict:
     """
@@ -199,7 +211,32 @@ def get_case_metadata(case_id: str, task: str = None) -> dict:
                     return None
 
                 with open(meta_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    meta = json.load(f)
+
+                # If image_path in metadata is old absolute path that doesn't exist,
+                # but local image.png exists, prefer the local image.png
+                stored_image_path = meta.get("image_path")
+                if stored_image_path:
+                    resolved = resolve_project_path(stored_image_path)
+                    if not resolved.exists():
+                        # Try local image.png in same dir as fallback
+                        local_img = case_dir / "image.png"
+                        if local_img.exists():
+                            meta["image_path"] = to_project_relative(local_img)
+                        else:
+                            local_img = case_dir / "image.jpg"
+                            if local_img.exists():
+                                meta["image_path"] = to_project_relative(local_img)
+                            else:
+                                local_img = case_dir / "image.jpeg"
+                                if local_img.exists():
+                                    meta["image_path"] = to_project_relative(local_img)
+                                else:
+                                    local_img = case_dir / "image.webp"
+                                    if local_img.exists():
+                                        meta["image_path"] = to_project_relative(local_img)
+
+                return meta
 
     return None
 
@@ -221,6 +258,7 @@ def print_case_list(cases: list):
         print(f"   {case_id} [{task}] {brief} {stars}")
         if tags:
             print(f"      🏷️  {tags}")
+
 
 def interactive_select_case(task: str = None) -> str:
     """
@@ -271,7 +309,7 @@ def interactive_select_case(task: str = None) -> str:
             print("   → 未找到匹配案例\n")
             return None
 
-    # 按编号选择
+    # Select by number
     try:
         idx = int(choice) - 1
         if 0 <= idx < len(cases):
@@ -284,13 +322,19 @@ def interactive_select_case(task: str = None) -> str:
     print("   → 无效选择，不参考案例\n")
     return None
 
+
 def auto_save_to_library(generation_result: dict, brief: str, params: dict):
     """自动生成完成后，自动保存到案例库"""
     if generation_result.get("status") != "success":
         return
 
     filepath = generation_result.get("filepath")
-    if not filepath or not os.path.exists(filepath):
+    if not filepath:
+        return
+
+    # Resolve to absolute path before saving
+    abs_path = resolve_project_path(filepath)
+    if not abs_path.exists():
         return
 
     metadata = {
@@ -301,9 +345,10 @@ def auto_save_to_library(generation_result: dict, brief: str, params: dict):
     }
 
     task = params.get("task", "poster")
-    add_case(filepath, metadata, task=task)
+    add_case(str(abs_path), metadata, task=task)
 
-# 快捷命令
+
+# Shortcut commands
 def lib():
     """查看案例库"""
     print("\n📚 案例库概览:\n")
@@ -312,6 +357,7 @@ def lib():
         print(f"【{task}】({len(cases)} 个)")
         print_case_list(cases)
         print()
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

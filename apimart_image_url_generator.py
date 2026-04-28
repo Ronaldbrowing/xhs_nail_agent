@@ -2,10 +2,13 @@ import os
 import json
 import time
 import mimetypes
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
 
 import requests
+
+from project_paths import OUTPUT_DIR
 
 
 API_BASE = os.getenv("APIMART_API_BASE", "https://api.apimart.ai")
@@ -195,6 +198,7 @@ def generate_image_with_reference(
     resolution: str = "1k",
     n: int = 1,
     official_fallback: Optional[bool] = None,
+    save_dir: str = None,
 ) -> Dict[str, Any]:
     reference_image_url = upload_reference_image(reference_image_path)
 
@@ -214,13 +218,30 @@ def generate_image_with_reference(
     if not result_url:
         raise RuntimeError(f"Completed task has no result image url: {json.dumps(task_data, ensure_ascii=False)}")
 
+    # Download result image to save_dir
+    save_dir = save_dir if save_dir is not None else str(OUTPUT_DIR)
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Download the result image
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_name = "".join(c if c.isalnum() else "_" for c in prompt[:20])
+    filename = f"{timestamp}_{safe_name}.png"
+    filepath = os.path.join(save_dir, filename)
+
+    response = requests.get(result_url, timeout=60)
+    response.raise_for_status()
+    with open(filepath, "wb") as f:
+        f.write(response.content)
+
     return {
         "status": "success",
+        "filepath": filepath,
         "url": result_url,
         "task_id": task_id,
         "reference_image_url": reference_image_url,
         "model": model,
         "size": size,
         "resolution": resolution,
+        "used_reference": True,
         "raw": task_data,
     }

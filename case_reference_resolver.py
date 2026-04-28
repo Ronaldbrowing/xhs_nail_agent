@@ -1,9 +1,7 @@
 from pathlib import Path
 from typing import Optional
 
-
-PROJECT_ROOT = Path(__file__).resolve().parent
-CASE_LIBRARY_ROOT = PROJECT_ROOT / "case_library"
+from project_paths import PROJECT_ROOT, CASE_LIBRARY_DIR
 
 
 def resolve_case_image_path(
@@ -17,7 +15,7 @@ def resolve_case_image_path(
     Example:
         case_library/poster/case_004_xxx/image.png
     """
-    case_dir_root = CASE_LIBRARY_ROOT / task
+    case_dir_root = CASE_LIBRARY_DIR / task
 
     if not case_dir_root.exists():
         raise FileNotFoundError(f"Case task directory not found: {case_dir_root}")
