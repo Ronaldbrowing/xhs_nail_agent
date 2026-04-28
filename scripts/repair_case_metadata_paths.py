@@ -4,8 +4,7 @@ Repair case_library metadata.json files that have old absolute paths.
 
 For each case_library/**/metadata.json:
 - If image_path in metadata points to a non-existent location but image exists in same dir, fix image_path
-- If image_path points to an OLD path (multi-agent-image) and that old path has the image,
-  copy the image to the new case_library dir and update image_path to relative path
+- If image_path is absolute (even if file exists), convert to project-relative path
 - Backup original to metadata.json.bak.path before modifying
 """
 
@@ -89,8 +88,8 @@ def repair_metadata_paths():
             stored_path_resolves = check_path.exists()
 
         # Check if metadata already has the correct relative path
-        # If stored_path is absolute (not relative), it needs repair even if file exists
-        # Use local_image existence as the source of truth since it handles newlines via filesystem
+        # Any absolute path (even if it exists in current project) must be converted to relative
+        # This ensures portability and consistent path format across the project
         stored_is_relative = stored_path and not Path(stored_path).is_absolute()
         if stored_is_relative and local_image and (cleaned_stored_path == correct_relative or stored_path_resolves):
             skipped_count += 1

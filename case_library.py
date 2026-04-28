@@ -8,7 +8,7 @@
 3. 选择案例作为参考图，进行风格迁移（图生图）
 4. 支持案例打标签、评分、搜索
 
-案例库路径：<PROJECT_ROOT>/case_library/
+案例库路径：case_library/
 ├── poster/
 │   ├── case_001_xxx/
 │   │   ├── image.png
