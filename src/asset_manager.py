@@ -45,20 +45,43 @@ def archive_reference_image(
     source_path: str,
     record_dir: Path,
     reference_id: str = "ref_001",
+    source_type: str = "local",
+    source_value: str = None,
+    source_task: str = None,
+    influence_scope: list = None,
 ) -> dict:
     """
     Copy a reference image into record_dir/assets/references/.
     Returns a ReferenceAsset dict with all metadata fields.
+
+    Args:
+        source_path: original path to the reference image (used to copy)
+        record_dir: the record directory to archive into
+        reference_id: e.g. "ref_001"
+        source_type: one of "case_id", "local_path", "upload", "history_record"
+        source_value: for case_id this is the case_id string; for local_path it's the project-relative path
+        source_task: the task type (poster/product/ppt/etc.) if from case library
+        influence_scope: list of page IDs influenced, e.g. ["page_01"] or ["global"]
     """
+    if influence_scope is None:
+        influence_scope = ["global"]
+
+    # Resolve actual file path
     src = resolve_project_path(source_path)
+    original_path_rel = to_project_relative(src)  # always project-relative
+
     if not src.exists():
         return _make_reference_asset(
             reference_id=reference_id,
-            original_path=str(src),
+            original_path=original_path_rel,
             archived_path=None,
             thumbnail_path=None,
             filename=None,
             exists=False,
+            source_type=source_type,
+            source_value=source_value or original_path_rel,
+            source_task=source_task,
+            influence_scope=influence_scope,
         )
 
     refs_dir = record_dir / "assets" / "references"
@@ -76,7 +99,7 @@ def archive_reference_image(
 
     return _make_reference_asset(
         reference_id=reference_id,
-        original_path=str(src),
+        original_path=original_path_rel,
         archived_path=to_project_relative(archived_path),
         thumbnail_path=None,  # thumbnail generation deferred
         filename=filename,
@@ -86,6 +109,10 @@ def archive_reference_image(
         height=h,
         sha256=sha,
         exists=True,
+        source_type=source_type,
+        source_value=source_value or original_path_rel,
+        source_task=source_task,
+        influence_scope=influence_scope,
     )
 
 
@@ -134,18 +161,24 @@ def _make_reference_asset(
     thumbnail_path: Optional[str],
     filename: Optional[str],
     exists: bool,
+    source_type: str = "local",
+    source_value: str = None,
+    source_task: Optional[str] = None,
+    influence_scope: list = None,
     content_type: str = "image/png",
     file_size: int = 0,
     width: int = 0,
     height: int = 0,
     sha256: str = "",
 ) -> dict:
+    if influence_scope is None:
+        influence_scope = ["style"] if exists else []
     return {
         "reference_id": reference_id,
         "enabled": exists,
-        "source_type": "local",
-        "source_value": original_path,
-        "source_task": None,
+        "source_type": source_type,
+        "source_value": source_value or original_path,
+        "source_task": source_task,
         "source_record_id": None,
         "original_path": original_path,
         "archived_path": archived_path,
@@ -158,6 +191,6 @@ def _make_reference_asset(
         "sha256": sha256,
         "exists": exists,
         "usage_policy": "copy" if exists else "unavailable",
-        "influence_scope": "style" if exists else None,
+        "influence_scope": influence_scope if exists else [],
         "dna": None,
     }

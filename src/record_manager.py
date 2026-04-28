@@ -5,7 +5,7 @@ with full lineage, diagnostics, and project-relative paths.
 """
 
 import json
-import hashlib
+import uuid
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Any
@@ -14,11 +14,13 @@ from project_paths import PROJECT_ROOT, OUTPUT_DIR, to_project_relative
 
 
 def generate_record_id(prefix: str = "image") -> str:
-    """Generate record_id = prefix_YYYYMMDD_HHMMSS_{6-char hash}"""
+    """Generate record_id = prefix_YYYYMMDD_HHMMSS_{8-char uuid4}
+
+    Uses uuid4 for collision resistance —同一秒内连续生成也不会重复。
+    """
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    hash_input = f"{ts}_{PROJECT_ROOT}".encode()
-    short_hash = hashlib.sha256(hash_input).hexdigest()[:6]
-    return f"{prefix}_{ts}_{short_hash}"
+    unique_part = uuid.uuid4().hex[:8]
+    return f"{prefix}_{ts}_{unique_part}"
 
 
 def create_record_dir(record_id: str, output_dir: Path = None) -> Path:

@@ -244,11 +244,17 @@ def step3_image_generator(
 
     # Check if reference image is provided and exists
     resolved_reference_path = None
+    fallback_reason = None
+    ref_source_type = None
+    ref_source_value = None
+    ref_source_task = None
+
     if reference_image:
         resolved_reference_path = resolve_project_path(reference_image)
         if not resolved_reference_path.exists():
             log("图片生成引擎", "🖼️", f"   ⚠️ 参考图不存在: {resolved_reference_path}，回退到纯文生图")
             resolved_reference_path = None
+            fallback_reason = "reference_image_not_found"
 
     used_reference = False
 
@@ -263,8 +269,12 @@ def step3_image_generator(
                 resolution="1k",
             )
             used_reference = True
+            ref_source_type = "local_path"
+            ref_source_value = to_project_relative(reference_image)
+            ref_source_task = task
         except Exception as e:
             log("图片生成引擎", "🖼️", f"   ⚠️ 图生图失败，回退到纯文生图: {e}")
+            fallback_reason = f"img2img_failed: {e}"
             raw_gen = generate_image(
                 prompt=final_prompt,
                 size=aspect,
@@ -283,7 +293,7 @@ def step3_image_generator(
     gen = _normalize_generation_result(raw_gen)
 
     if not gen.get("success"):
-        return {
+        result = {
             "status": "failed",
             "error": gen.get("error", "Image generation failed"),
             "final_prompt": final_prompt,
@@ -294,7 +304,16 @@ def step3_image_generator(
                 "quality": quality,
             },
             "used_reference": used_reference,
+            "reference_image_path": reference_image,
+            "reference_source_type": ref_source_type,
+            "reference_source_value": ref_source_value,
+            "reference_source_task": ref_source_task,
+            "reference_exists": resolved_reference_path.exists() if reference_image else False,
+            "fallback_reason": fallback_reason,
         }
+        if "actual_time" in gen:
+            result["actual_time"] = gen["actual_time"]
+        return result
 
     result = {
         "status": "success",
@@ -309,6 +328,12 @@ def step3_image_generator(
             "quality": quality,
         },
         "used_reference": gen.get("used_reference", used_reference),
+        "reference_image_path": reference_image,
+        "reference_source_type": ref_source_type,
+        "reference_source_value": ref_source_value,
+        "reference_source_task": ref_source_task,
+        "reference_exists": resolved_reference_path.exists() if reference_image else False,
+        "fallback_reason": fallback_reason,
     }
 
     if "actual_time" in gen:
@@ -347,12 +372,12 @@ def step5_metadata(
     model_usage = model_usage or {}
 
     # --- Always create record_dir for new runs ---
+    # Even failed runs get a record_dir so history_index can track them
     try:
         record_id = generate_record_id(prefix="image")
         record_dir = create_record_dir(record_id)
     except Exception as e:
         log("档案管理员", "📁", f"⚠️ record_dir 创建失败，降级到旧模式: {e}")
-        # Fallback: legacy archive path
         normalized_gen = dict(generation)
         if generation.get("filepath"):
             normalized_gen["filepath"] = to_project_relative(generation["filepath"])
@@ -392,59 +417,95 @@ def step5_metadata(
         "language": "zh",
     }
 
-    # --- Archive generation result if exists ---
+    # --- Archive references if used_reference ---
     references = []
-    pages = []
+    ref_asset = None
 
-    if generation.get("filepath"):
+    gen_used_ref = generation.get("used_reference", False)
+    ref_img_path = generation.get("reference_image_path")
+    ref_exists = generation.get("reference_exists", False)
+
+    if gen_used_ref and ref_img_path and ref_exists:
+        ref_source_type = generation.get("reference_source_type", "local_path")
+        ref_source_value = generation.get("reference_source_value")
+        ref_source_task = generation.get("reference_source_task")
+
+        ref_asset = archive_reference_image(
+            source_path=ref_img_path,
+            record_dir=record_dir,
+            reference_id="ref_001",
+            source_type=ref_source_type,
+            source_value=ref_source_value,
+            source_task=ref_source_task,
+            influence_scope=["page_01"],
+        )
+        references.append(ref_asset)
+
+    # --- Archive generation result ---
+    pages = []
+    gen_status = generation.get("status", "success")
+    gen_filepath = generation.get("filepath")
+
+    if gen_filepath:
         gen_asset = archive_generated_image(
-            source_path=generation["filepath"],
+            source_path=gen_filepath,
             record_dir=record_dir,
             page_id="page_01",
             role="single_image",
         )
-        pages.append({
-            "page_id": "page_01",
-            "page_index": 1,
-            "role": "single_image",
-            "title": "Generated Image",
-            "goal": "Single image generation",
-            "status": generation.get("status", "success"),
-            "image": {
-                "path": gen_asset.get("archived_path"),
-                "thumbnail_path": None,
-                "url": None,
-                "width": gen_asset.get("width", 0),
-                "height": gen_asset.get("height", 0),
-                "ratio": None,
-                "content_type": gen_asset.get("content_type", "image/png"),
-                "file_size": gen_asset.get("file_size", 0),
-                "sha256": gen_asset.get("sha256", ""),
-            },
-            "reference_ids": [],
-            "used_reference": generation.get("used_reference", False),
-            "prompt": {
-                "visual_brief": None,
-                "final_prompt": generation.get("final_prompt", ""),
-                "negative_prompt": None,
-            },
-            "generation": {
-                "mode": "single_image",
-                "provider": None,
-                "model": None,
-                "task_id": generation.get("task_id"),
-                "started_at": None,
-                "completed_at": None,
-                "duration_ms": generation.get("actual_time"),
-                "retry_count": 0,
-            },
-            "qa": {
-                "score": qa.get("score", 0),
-                "passed": qa.get("approval", False),
-                "issues": [],
-                "checks": {},
-            },
-        })
+    else:
+        gen_asset = None
+
+    # Determine generation mode
+    gen_mode = "image_to_image" if gen_used_ref else "text_to_image"
+
+    pages.append({
+        "page_id": "page_01",
+        "page_index": 1,
+        "role": "single_image",
+        "title": "Generated Image",
+        "goal": "Single image generation",
+        "status": gen_status,
+        "image": {
+            "path": gen_asset.get("archived_path") if gen_asset else None,
+            "thumbnail_path": None,
+            "url": None,
+            "width": gen_asset.get("width", 0) if gen_asset else 0,
+            "height": gen_asset.get("height", 0) if gen_asset else 0,
+            "ratio": None,
+            "content_type": gen_asset.get("content_type", "image/png") if gen_asset else None,
+            "file_size": gen_asset.get("file_size", 0) if gen_asset else 0,
+            "sha256": gen_asset.get("sha256", "") if gen_asset else "",
+        },
+        "reference_ids": ["ref_001"] if gen_used_ref and ref_asset else [],
+        "used_reference": gen_used_ref,
+        "prompt": {
+            "visual_brief": None,
+            "final_prompt": generation.get("final_prompt", ""),
+            "negative_prompt": None,
+        },
+        "generation": {
+            "mode": gen_mode,
+            "provider": None,
+            "model": None,
+            "task_id": generation.get("task_id"),
+            "started_at": None,
+            "completed_at": None,
+            "duration_ms": generation.get("actual_time"),
+            "retry_count": 0,
+        },
+        "qa": {
+            "score": qa.get("score", 0),
+            "passed": qa.get("approval", False),
+            "issues": [],
+            "checks": {},
+        },
+    })
+
+    # --- Build display reference_thumbnail_path ---
+    ref_thumb_path = None
+    if ref_asset and ref_asset.get("archived_path"):
+        ref_thumb_path = ref_asset.get("archived_path")
 
     # --- Build archive dict ---
     normalized_gen = dict(generation)
@@ -492,7 +553,7 @@ def step5_metadata(
             "title": user_input[:50] if user_input else "Untitled",
             "subtitle": style_data.get("task", "poster"),
             "cover_image_path": pages[0]["image"]["path"] if pages else None,
-            "reference_thumbnail_path": None,
+            "reference_thumbnail_path": ref_thumb_path,
             "badge_text": None,
             "style_label": style_data.get("task", "poster"),
             "status_label": generation.get("status", "success"),
@@ -528,7 +589,7 @@ def step5_metadata(
             note_goal=None,
             page_count=1,
             cover_image_path=pages[0]["image"]["path"] if pages else None,
-            reference_thumbnail_path=None,
+            reference_thumbnail_path=ref_thumb_path,
             used_reference=generation.get("used_reference", False),
             overall_score=qa.get("score", 0),
             package_path=to_project_relative(record_dir / "note_package.json"),
@@ -702,28 +763,39 @@ def run(
 
     if generation.get("status") != "success":
         print("=" * 70)
-        print("❌ 生成失败")
+        print("❌ 生成失败，仍写入归档记录")
         print("=" * 70)
-        return {
-            "success": False,
-            "stage": "generation",
-            "error": generation.get("error"),
-            "workflow_diagnostics": {
-                "prompt_analysis_mode": prompt_analysis_mode,
-                "style_params_mode": style_params_mode,
-                "forced_params_applied": forced_params_applied,
-                "final_params": {
-                    "task": final_task,
-                    "direction": final_direction,
-                    "aspect": final_aspect,
-                    "quality": final_quality,
+        failed_qa = {"verdict": "FAIL", "score": 0.0, "approval": False}
+        # Still call step5_metadata so the failed run gets a record_dir
+        try:
+            step5_metadata(
+                user_input=user_input,
+                prompt_data=prompt_data,
+                style_data=style_data,
+                generation=generation,
+                qa=failed_qa,
+                workflow_diagnostics={
+                    "prompt_analysis_mode": prompt_analysis_mode,
+                    "style_params_mode": style_params_mode,
+                    "forced_params_applied": forced_params_applied,
+                    "final_params": {
+                        "task": final_task,
+                        "direction": final_direction,
+                        "aspect": final_aspect,
+                        "quality": final_quality,
+                    },
+                    "stage_status": stage_status,
+                    "precompiled_brief": precompiled_brief,
+                    "dna_summary_included": bool(effective_dna_summary),
+                    "dna_summary_source": dna_summary_source,
+                    "failed_stage": "generation",
+                    "error": generation.get("error"),
                 },
-                "stage_status": stage_status,
-                "precompiled_brief": precompiled_brief,
-                "dna_summary_included": bool(effective_dna_summary),
-                "dna_summary_source": dna_summary_source,
-            }
-        }
+                model_usage=model_usage,
+                dna_summary=effective_dna_summary,
+            )
+        except Exception as e:
+            print(f"[WARN] Failed to write failure archive: {e}")
 
     stage_status["generation_ok"] = True
     model_usage["image_generation_succeeded"] += 1
