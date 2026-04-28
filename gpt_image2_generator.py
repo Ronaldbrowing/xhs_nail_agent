@@ -11,7 +11,7 @@ import requests
 from datetime import datetime
 from pathlib import Path
 
-from project_paths import OUTPUT_DIR
+from project_paths import OUTPUT_DIR, to_project_relative
 
 API_BASE = "https://api.apimart.ai/v1"
 
@@ -202,7 +202,7 @@ def generate_image(prompt: str, size: str = "1:1", save_dir: str = None,
     
     return {
         "status": "success",
-        "filepath": filepath,
+        "filepath": to_project_relative(filepath),
         "filename": filename,
         "image_url": image_url,
         "task_id": task_id,

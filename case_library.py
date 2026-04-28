@@ -151,14 +151,14 @@ def search_cases(keyword: str, task: str = None) -> list:
 
 def get_case_image_path(case_id: str, task: str = None) -> str:
     """
-    获取案例图片路径
+    获取案例图片路径（返回项目相对路径）
 
     Args:
         case_id: 案例编号 (如 "case_001")
         task: 任务类型（如果知道）
 
     Returns:
-        图片路径，找不到返回 None
+        图片路径（项目相对路径），找不到返回 None
     """
     if task:
         task_dirs = [CASE_LIBRARY_DIR / task]
@@ -174,7 +174,12 @@ def get_case_image_path(case_id: str, task: str = None) -> str:
                 for ext in [".png", ".jpg", ".jpeg", ".webp"]:
                     img = case_dir / f"image{ext}"
                     if img.exists():
-                        return str(img)
+                        # Clean path - remove any newline characters
+                        rel = to_project_relative(img)
+                        if "\n" in rel or "\\n" in rel:
+                            cleaned_dir = case_dir.name.replace("\n", "").replace("\\n", "").strip()
+                            rel = f"case_library/{task_dir.name}/{cleaned_dir}/image{ext}"
+                        return rel
     return None
 
 

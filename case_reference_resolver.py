@@ -7,24 +7,27 @@ from project_paths import PROJECT_ROOT, CASE_LIBRARY_DIR
 def resolve_case_image_path(
     case_id: str,
     task: str = "poster",
-    filename: str = "image.png",
 ) -> str:
     """
     Resolve a case_id like 'case_004' to its reference image path.
 
     Example:
         case_library/poster/case_004_xxx/image.png
+
+    Supports: image.png, image.jpg, image.jpeg, image.webp
     """
     case_dir_root = CASE_LIBRARY_DIR / task
 
     if not case_dir_root.exists():
         raise FileNotFoundError(f"Case task directory not found: {case_dir_root}")
 
-    candidates = sorted(case_dir_root.glob(f"{case_id}*/{filename}"))
+    candidates = []
+    for ext in [".png", ".jpg", ".jpeg", ".webp"]:
+        candidates.extend(sorted(case_dir_root.glob(f"{case_id}*/image{ext}")))
 
     if not candidates:
         raise FileNotFoundError(
-            f"No reference image found for case_id={case_id!r}, task={task!r}, filename={filename!r}"
+            f"No reference image found for case_id={case_id!r}, task={task!r}"
         )
 
     if len(candidates) > 1:
@@ -38,13 +41,12 @@ def resolve_case_image_path(
 def try_resolve_case_image_path(
     case_id: Optional[str],
     task: str = "poster",
-    filename: str = "image.png",
 ) -> Optional[str]:
     if not case_id:
         return None
 
     try:
-        return resolve_case_image_path(case_id=case_id, task=task, filename=filename)
+        return resolve_case_image_path(case_id=case_id, task=task)
     except FileNotFoundError:
         return None
 
