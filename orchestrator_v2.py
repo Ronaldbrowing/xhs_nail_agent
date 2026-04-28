@@ -20,6 +20,9 @@ from case_library import (
     get_case_metadata,
 )
 from case_reference_resolver import try_resolve_case_image_path
+from src.record_manager import generate_record_id, create_record_dir, write_note_package, write_archive, build_record_archive
+from src.asset_manager import archive_reference_image, archive_generated_image
+from src.history_index import append_history_index, build_search_text
 
 # Ensure project directories exist at module load
 ensure_project_dirs()
@@ -343,31 +346,200 @@ def step5_metadata(
     workflow_diagnostics = workflow_diagnostics or {}
     model_usage = model_usage or {}
 
-    # Normalize generation.filepath to project-relative for the archive
+    # --- Always create record_dir for new runs ---
+    try:
+        record_id = generate_record_id(prefix="image")
+        record_dir = create_record_dir(record_id)
+    except Exception as e:
+        log("档案管理员", "📁", f"⚠️ record_dir 创建失败，降级到旧模式: {e}")
+        # Fallback: legacy archive path
+        normalized_gen = dict(generation)
+        if generation.get("filepath"):
+            normalized_gen["filepath"] = to_project_relative(generation["filepath"])
+        archive = {
+            "timestamp": datetime.now().isoformat(),
+            "user_input": user_input,
+            "prompt_analysis": prompt_data,
+            "style_params": style_data,
+            "workflow_diagnostics": workflow_diagnostics,
+            "model_usage": model_usage,
+            "generation": normalized_gen,
+            "quality_check": qa,
+            "dna_summary": dna_summary,
+        }
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        meta_path = OUTPUT_DIR / f"{ts}_archive.json"
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(archive, f, indent=2, ensure_ascii=False)
+        log("档案管理员", "📁", f"   ✅ (legacy) {to_project_relative(meta_path)}")
+        return str(meta_path)
+
+    # --- Build input_fields per PRD requirement #9 ---
+    input_fields = {
+        "brief": user_input,
+        "style_id": style_data.get("task", "poster"),
+        "note_goal": None,
+        "page_count": 1,
+        "skin_tone": None,
+        "nail_length": None,
+        "nail_shape": None,
+        "color_preference": None,
+        "avoid_elements": [],
+        "allow_text_on_image": False,
+        "generate_images": True,
+        "generate_copy": False,
+        "generate_tags": False,
+        "language": "zh",
+    }
+
+    # --- Archive generation result if exists ---
+    references = []
+    pages = []
+
+    if generation.get("filepath"):
+        gen_asset = archive_generated_image(
+            source_path=generation["filepath"],
+            record_dir=record_dir,
+            page_id="page_01",
+            role="single_image",
+        )
+        pages.append({
+            "page_id": "page_01",
+            "page_index": 1,
+            "role": "single_image",
+            "title": "Generated Image",
+            "goal": "Single image generation",
+            "status": generation.get("status", "success"),
+            "image": {
+                "path": gen_asset.get("archived_path"),
+                "thumbnail_path": None,
+                "url": None,
+                "width": gen_asset.get("width", 0),
+                "height": gen_asset.get("height", 0),
+                "ratio": None,
+                "content_type": gen_asset.get("content_type", "image/png"),
+                "file_size": gen_asset.get("file_size", 0),
+                "sha256": gen_asset.get("sha256", ""),
+            },
+            "reference_ids": [],
+            "used_reference": generation.get("used_reference", False),
+            "prompt": {
+                "visual_brief": None,
+                "final_prompt": generation.get("final_prompt", ""),
+                "negative_prompt": None,
+            },
+            "generation": {
+                "mode": "single_image",
+                "provider": None,
+                "model": None,
+                "task_id": generation.get("task_id"),
+                "started_at": None,
+                "completed_at": None,
+                "duration_ms": generation.get("actual_time"),
+                "retry_count": 0,
+            },
+            "qa": {
+                "score": qa.get("score", 0),
+                "passed": qa.get("approval", False),
+                "issues": [],
+                "checks": {},
+            },
+        })
+
+    # --- Build archive dict ---
     normalized_gen = dict(generation)
     if generation.get("filepath"):
         normalized_gen["filepath"] = to_project_relative(generation["filepath"])
 
-    archive = {
-        "timestamp": datetime.now().isoformat(),
-        "user_input": user_input,
-        "prompt_analysis": prompt_data,
-        "style_params": style_data,
-        "workflow_diagnostics": workflow_diagnostics,
-        "model_usage": model_usage,
-        "generation": normalized_gen,
-        "quality_check": qa,
-        "dna_summary": dna_summary,
+    archive = build_record_archive(
+        record_id=record_id,
+        user_input=user_input,
+        prompt_data=prompt_data,
+        style_data=style_data,
+        generation=generation,
+        qa=qa,
+        workflow_diagnostics=workflow_diagnostics,
+        model_usage=model_usage,
+        dna_summary=dna_summary,
+        references=references,
+        pages=pages,
+        input_fields=input_fields,
+    )
+
+    # --- Build note_package.json ---
+    note_package = {
+        "record_id": record_id,
+        "record_type": "single_image",
+        "schema_version": "1.0",
+        "workflow_name": "orchestrator_v2",
+        "workflow_version": "2.0",
+        "status": generation.get("status", "success"),
+        "created_at": datetime.now().isoformat(),
+        "updated_at": datetime.now().isoformat(),
+        "input": input_fields,
+        "references": references,
+        "planning": {},
+        "visual_dna": {"dna_summary": dna_summary} if dna_summary else {},
+        "prompts": {},
+        "pages": pages,
+        "copywriting": {},
+        "quality": qa,
+        "workflow_trace": {"diagnostics": workflow_diagnostics},
+        "metrics": model_usage,
+        "lineage": {},
+        "user_feedback": {},
+        "display": {
+            "title": user_input[:50] if user_input else "Untitled",
+            "subtitle": style_data.get("task", "poster"),
+            "cover_image_path": pages[0]["image"]["path"] if pages else None,
+            "reference_thumbnail_path": None,
+            "badge_text": None,
+            "style_label": style_data.get("task", "poster"),
+            "status_label": generation.get("status", "success"),
+            "score_label": f"{qa.get('score', 0)}/10",
+            "search_text": user_input or "",
+        },
+        "files": {
+            "package_path": to_project_relative(record_dir / "note_package.json"),
+            "archive_path": to_project_relative(record_dir / "archive.json"),
+        },
     }
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    meta_path = OUTPUT_DIR / f"{ts}_archive.json"
+    write_note_package(note_package, record_dir)
+    write_archive(archive, record_dir)
 
-    with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump(archive, f, indent=2, ensure_ascii=False)
+    # --- Append history index ---
+    try:
+        search_text = build_search_text(
+            brief=user_input,
+            style_id=style_data.get("task", "poster"),
+            tags=[],
+        )
+        append_history_index(
+            record_id=record_id,
+            record_type="single_image",
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat(),
+            status=generation.get("status", "success"),
+            title=user_input[:80] if user_input else "Untitled",
+            brief=user_input,
+            style_id=style_data.get("task", "poster"),
+            style_label=style_data.get("task", "poster"),
+            note_goal=None,
+            page_count=1,
+            cover_image_path=pages[0]["image"]["path"] if pages else None,
+            reference_thumbnail_path=None,
+            used_reference=generation.get("used_reference", False),
+            overall_score=qa.get("score", 0),
+            package_path=to_project_relative(record_dir / "note_package.json"),
+            search_text=search_text,
+        )
+    except Exception as e:
+        log("档案管理员", "📁", f"⚠️ history_index 追加失败: {e}")
 
-    log("档案管理员", "📁", f"   ✅ {to_project_relative(meta_path)}")
-    return str(meta_path)
+    log("档案管理员", "📁", f"   ✅ record_dir: {record_id}")
+    log("档案管理员", "📁", f"   ✅ note_package: {to_project_relative(record_dir / 'note_package.json')}")
+    return to_project_relative(record_dir / "note_package.json")
 
 
 def run(
