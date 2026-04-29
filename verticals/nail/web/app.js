@@ -654,6 +654,21 @@
             error.message.includes("找不到")
           ));
         if (isNotFound) {
+          // Fallback: jobStore lost but noteId may still have package on disk
+          if (jobContext.noteId) {
+            try {
+              const packageData = await fetchJson("/api/nail/notes/" + encodeURIComponent(jobContext.noteId) + "/package");
+              if (packageData && packageData.pages && packageData.pages.length > 0) {
+                applyStatus("succeeded");
+                resultMeta.textContent = "上次任务记录已过期，但已根据结果包恢复内容。";
+                setJobMeta({ note: "从结果包恢复", job_id: jobContext.jobId });
+                renderPackage(packageData, jobContext.generateImages, { job_id: jobContext.jobId, status: "succeeded", note_id: jobContext.noteId });
+                return;
+              }
+            } catch (fallbackErr) {
+              // fallback also failed, fall through to error message
+            }
+          }
           clearLastJob();
           applyStatus("failed", "无法找到上次任务");
           resultMeta.textContent = "无法找到上次任务，可能已过期或被清除。";
