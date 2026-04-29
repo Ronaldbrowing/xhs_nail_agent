@@ -78,7 +78,7 @@
       timeout: {
         badge: "耗时较长",
         title: "生成时间较长，可稍后查看",
-        detail: "页面已经停止轮询。你可以保留任务编号，稍后回来继续查看结果。",
+        detail: "生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。",
       },
     },
     pageStatusMap: {
@@ -109,9 +109,13 @@
   const noteSummary = document.getElementById("note-summary");
   const pagesGrid = document.getElementById("pages-grid");
   const jobMeta = document.getElementById("job-meta");
+  const resumePanel = document.getElementById("resume-panel");
+  const resumeText = document.getElementById("resume-text");
+  const continueButton = document.getElementById("continue-button");
 
-  const POLL_INTERVAL_MS = 1200;
-  const POLL_TIMEOUT_MS = 120000;
+  const STORAGE_KEY = "nail_studio_last_job";
+  let currentJobContext = null;
+  let continueQueryPromise = null;
 
   function populateSelect(selectElement, options) {
     selectElement.innerHTML = "";
@@ -139,6 +143,62 @@
 
   function setJobMeta(payload) {
     jobMeta.textContent = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+  }
+
+  function getPollConfig(generateImages) {
+    if (generateImages) {
+      return {
+        pollIntervalMs: 5000,
+        maxPollMs: 15 * 60 * 1000,
+      };
+    }
+    return {
+      pollIntervalMs: 1000,
+      maxPollMs: 60000,
+    };
+  }
+
+  function saveLastJob(context) {
+    currentJobContext = context;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(context));
+    } catch (error) {
+      // Ignore storage failures and keep the in-memory context.
+    }
+  }
+
+  function clearLastJob() {
+    currentJobContext = null;
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch (error) {
+      // Ignore storage failures.
+    }
+  }
+
+  function loadLastJob() {
+    if (currentJobContext) {
+      return currentJobContext;
+    }
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (!stored) {
+        return null;
+      }
+      currentJobContext = JSON.parse(stored);
+      return currentJobContext;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function showResumePanel(message) {
+    resumeText.textContent = message;
+    resumePanel.hidden = false;
+  }
+
+  function hideResumePanel() {
+    resumePanel.hidden = true;
   }
 
   function applyStatus(stateKey, detailText) {
@@ -355,10 +415,32 @@
     return payload;
   }
 
-  async function pollJob(jobId) {
+  async function renderSucceededJob(job, generateImages) {
+    if (!job.note_id) {
+      throw new Error("job succeeded but note_id is missing");
+    }
+
+    applyStatus("succeeded", "生成完成");
+    const packageData = await fetchJson("/api/nail/notes/" + encodeURIComponent(job.note_id) + "/package");
+    saveLastJob({
+      jobId: job.job_id,
+      noteId: job.note_id,
+      generateImages: generateImages,
+    });
+    renderPackage(packageData, generateImages, job);
+    hideResumePanel();
+  }
+
+  async function pollJob(jobId, generateImages) {
+    const pollConfig = getPollConfig(generateImages);
     const startedAt = Date.now();
-    while (Date.now() - startedAt < POLL_TIMEOUT_MS) {
+    while (Date.now() - startedAt < pollConfig.maxPollMs) {
       const job = await fetchJson("/api/jobs/" + encodeURIComponent(jobId));
+      saveLastJob({
+        jobId: job.job_id,
+        noteId: job.note_id || null,
+        generateImages: generateImages,
+      });
       if (job.status === "queued") {
         applyStatus("queued", "已提交，等待开始");
       } else if (job.status === "running") {
@@ -372,10 +454,81 @@
         return { kind: "failed", job: job };
       }
       await new Promise(function (resolve) {
-        window.setTimeout(resolve, POLL_INTERVAL_MS);
+        window.setTimeout(resolve, pollConfig.pollIntervalMs);
       });
     }
     return { kind: "timeout", job: { job_id: jobId } };
+  }
+
+  async function continueQuery(jobContext, options) {
+    const settings = options || {};
+    if (!jobContext || !jobContext.jobId) {
+      return;
+    }
+    if (continueQueryPromise) {
+      return continueQueryPromise;
+    }
+
+    continueButton.disabled = true;
+    continueButton.textContent = "查询中...";
+
+    continueQueryPromise = (async function () {
+      try {
+        const job = await fetchJson("/api/jobs/" + encodeURIComponent(jobContext.jobId));
+        setJobMeta(job);
+        saveLastJob({
+          jobId: job.job_id,
+          noteId: job.note_id || null,
+          generateImages: jobContext.generateImages,
+        });
+
+        if (job.status === "succeeded") {
+          await renderSucceededJob(job, jobContext.generateImages);
+          return;
+        }
+
+        if (job.status === "failed" || job.status === "partial_failed") {
+          applyStatus(job.status === "failed" ? "failed" : "partial_failed");
+          resultMeta.textContent = "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
+          return;
+        }
+
+        applyStatus(job.status === "running" ? "running" : "queued");
+        showResumePanel("生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。");
+        const result = await pollJob(job.job_id, jobContext.generateImages);
+
+        if (result.kind === "timeout") {
+          applyStatus("timeout");
+          resultMeta.textContent = "生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。";
+          setJobMeta({ job_id: job.job_id, status: "timeout" });
+          showResumePanel("生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。");
+          return;
+        }
+
+        if (result.kind === "failed") {
+          const failedJob = result.job;
+          applyStatus(failedJob.status === "partial_failed" ? "partial_failed" : "failed");
+          resultMeta.textContent = "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
+          setJobMeta(failedJob);
+          return;
+        }
+
+        await renderSucceededJob(result.job, jobContext.generateImages);
+      } catch (error) {
+        applyStatus("failed", "生成失败");
+        resultMeta.textContent = "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
+        setJobMeta({ error: error.message || String(error) });
+      } finally {
+        continueQueryPromise = null;
+        continueButton.disabled = false;
+        continueButton.textContent = "继续查询";
+        if (!settings.keepPanelOpen && statusBadge.textContent === APP_CONFIG.jobStatusMap.succeeded.badge) {
+          hideResumePanel();
+        }
+      }
+    })();
+
+    return continueQueryPromise;
   }
 
   exampleButton.addEventListener("click", function () {
@@ -389,10 +542,18 @@
   });
 
   styleField.addEventListener("change", updateStyleHelper);
+  continueButton.addEventListener("click", function () {
+    const storedJob = loadLastJob();
+    if (!storedJob) {
+      return;
+    }
+    continueQuery(storedJob, { keepPanelOpen: false });
+  });
 
   form.addEventListener("submit", async function (event) {
     event.preventDefault();
     clearResults();
+    hideResumePanel();
     submitButton.disabled = true;
     submitButton.textContent = "生成中...";
 
@@ -418,12 +579,18 @@
 
       applyStatus("queued", "已提交，等待开始");
       setJobMeta({ job_id: created.job_id, payload: payload });
+      saveLastJob({
+        jobId: created.job_id,
+        noteId: null,
+        generateImages: generateImages,
+      });
 
-      const result = await pollJob(created.job_id);
+      const result = await pollJob(created.job_id, generateImages);
       if (result.kind === "timeout") {
-        applyStatus("timeout", "生成时间较长，可稍后根据任务编号查看。");
-        resultMeta.textContent = "任务仍在继续，你可以稍后回来查看，任务编号已保留在开发信息里。";
+        applyStatus("timeout");
+        resultMeta.textContent = "生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。";
         setJobMeta({ job_id: created.job_id, status: "timeout" });
+        showResumePanel("生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。");
         return;
       }
 
@@ -435,14 +602,7 @@
         return;
       }
 
-      const job = result.job;
-      if (!job.note_id) {
-        throw new Error("job succeeded but note_id is missing");
-      }
-
-      applyStatus("succeeded", "生成完成");
-      const packageData = await fetchJson("/api/nail/notes/" + encodeURIComponent(job.note_id) + "/package");
-      renderPackage(packageData, generateImages, job);
+      await renderSucceededJob(result.job, generateImages);
     } catch (error) {
       applyStatus("failed", "生成失败");
       resultMeta.textContent = "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
@@ -456,4 +616,10 @@
   initializeFormOptions();
   clearResults();
   applyStatus("idle");
+  const storedJob = loadLastJob();
+  if (storedJob && storedJob.jobId) {
+    setJobMeta(storedJob);
+    showResumePanel("发现上次任务，是否继续查看？");
+    resultMeta.textContent = "如果你上次的任务已经跑完，可以直接继续查询并恢复内容预览。";
+  }
 })();

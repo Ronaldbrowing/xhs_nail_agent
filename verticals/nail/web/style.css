@@ -392,6 +392,24 @@ button:disabled {
   padding: 20px;
 }
 
+.resume-panel {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.resume-text {
+  margin-bottom: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.resume-actions {
+  display: flex;
+  gap: 10px;
+}
+
 .progress-title {
   margin-bottom: 8px;
   font-size: 18px;
@@ -421,10 +439,14 @@ button:disabled {
 }
 
 .status-failed,
-.status-timeout,
 .status-partial_failed {
   background: #fde7e7;
   color: #b42318;
+}
+
+.status-timeout {
+  background: #fff4db;
+  color: #9a6700;
 }
 
 .code-block {

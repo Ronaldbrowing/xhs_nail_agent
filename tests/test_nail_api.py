@@ -54,6 +54,8 @@ class NailFastAPITests(unittest.TestCase):
         self.assertIn("内容需求", body)
         self.assertIn("使用示例", body)
         self.assertIn("当前内容场景", body)
+        self.assertIn("继续查询", body)
+        self.assertIn("发现上次任务", body)
         self.assertIn("/web/style.css", body)
         self.assertIn("/web/app.js", body)
 
