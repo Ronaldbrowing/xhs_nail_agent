@@ -8,7 +8,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from project_paths import resolve_project_path
 from verticals.nail.note_workflow import NailNoteWorkflow
 from verticals.nail.note_workflow_schemas import NailNoteUserInput
 
@@ -20,38 +19,22 @@ def _guard_real_api() -> int:
     return 1
 
 
-def find_ref_image(user_path=None) -> Path:
-    if user_path:
-        candidate = Path(user_path)
-        if candidate.exists():
-            return candidate.resolve()
-        raise SystemExit("FAIL: 指定参考图不存在: {path}".format(path=user_path))
-
-    output_dir = PROJECT_ROOT / "output"
-    nail_dirs = sorted(output_dir.glob("nail_*_single_seed_summer_cat_eye_short"), key=os.path.getmtime, reverse=True)
-    for directory in nail_dirs:
-        cover = directory / "page_01_cover.png"
-        if cover.exists():
-            return cover.resolve()
-    raise SystemExit("FAIL: 未找到第一步输出，请手动指定参考图路径")
-
-
 def main() -> int:
     if _guard_real_api():
         return 0
 
-    parser = argparse.ArgumentParser(description="Run real nail note image integration with a local reference image.")
-    parser.add_argument("reference_image", nargs="?", default=None)
+    parser = argparse.ArgumentParser(description="Run real nail note image integration with a case_id reference.")
+    parser.add_argument("--case-id", default=None)
     parser.add_argument("--max-workers", type=int, default=1)
     args = parser.parse_args()
 
-    ref_image = find_ref_image(args.reference_image)
-    print("reference_source=local_path")
-    print("reference_image_path={path}".format(path=ref_image))
-    print("case_id=None")
+    case_id = args.case_id or "case_038"
+    print("reference_source=case_id")
+    print("case_id={case_id}".format(case_id=case_id))
+    print("reference_image_path=None")
 
     user_input = NailNoteUserInput(
-        brief="夏日蓝色猫眼短甲，清透显白，参考图中同款风格",
+        brief="夏日蓝色猫眼短甲，清透显白，参考历史案例风格",
         style_id="single_seed_summer_cat_eye_short",
         skin_tone="黄皮",
         nail_length="短甲",
@@ -64,8 +47,8 @@ def main() -> int:
         quality="draft",
         aspect="3:4",
         direction="balanced",
-        reference_image_path=str(ref_image),
-        case_id=None,
+        reference_image_path=None,
+        case_id=case_id,
         max_workers=args.max_workers,
     )
 

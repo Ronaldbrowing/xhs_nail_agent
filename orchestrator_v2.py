@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import datetime
 import json
 import os
+import time
 
 from project_paths import (
     PROJECT_ROOT,
@@ -23,6 +24,7 @@ from case_reference_resolver import try_resolve_case_image_path
 from src.record_manager import generate_record_id, create_record_dir, write_note_package, write_archive, build_record_archive
 from src.asset_manager import archive_reference_image, archive_generated_image
 from src.history_index import append_history_index, build_search_text
+from verticals.nail.reference_context import build_case_dna_summary_from_metadata
 
 # Ensure project directories exist at module load
 ensure_project_dirs()
@@ -90,79 +92,7 @@ def _normalize_generation_result(raw):
     return normalized
 
 def build_dna_summary_from_case_meta(case_meta: dict) -> str:
-    """
-    从案例 metadata 自动生成可注入 prompt 的 DNA 摘要。
-
-    这个函数不依赖多模态模型，不读取图片本身；
-    它只使用历史案例保存下来的 brief、prompt、params、tags 等文本信息。
-    """
-    if not case_meta:
-        return None
-
-    brief = str(case_meta.get("brief") or "").strip()
-    prompt = str(case_meta.get("prompt") or "").strip()
-    if "【参考图DNA摘要】" in prompt:
-        prompt = prompt.split("【参考图DNA摘要】", 1)[0].strip()
-    params = case_meta.get("params") or {}
-    tags = case_meta.get("tags") or []
-    rating = case_meta.get("rating", 0)
-
-    text_pool = "\n".join([
-        brief,
-        prompt,
-        " ".join(str(tag) for tag in tags),
-    ])
-
-    style_hints = []
-
-    keyword_rules = [
-        ("清透", "清透感"),
-        ("透亮", "透亮质感"),
-        ("玻璃", "玻璃感"),
-        ("猫眼", "猫眼光泽"),
-        ("珠光", "珠光反射"),
-        ("渐变", "渐变过渡"),
-        ("蓝", "蓝色系"),
-        ("粉", "粉色系"),
-        ("裸", "裸色系"),
-        ("短甲", "短甲形态"),
-        ("长甲", "长甲形态"),
-        ("法式", "法式边缘设计"),
-        ("夏日", "夏日清爽氛围"),
-        ("小红书", "小红书封面风格"),
-        ("封面", "封面式构图"),
-        ("留白", "留白构图"),
-        ("高级", "高级感"),
-        ("极简", "极简风格"),
-        ("甜美", "甜美风格"),
-    ]
-
-    for keyword, label in keyword_rules:
-        if keyword in text_pool and label not in style_hints:
-            style_hints.append(label)
-
-    if not style_hints:
-        style_hints.append("历史案例中的视觉风格、构图逻辑和质感表达")
-
-    dna_parts = [
-        "请参考历史案例的视觉 DNA，但不要机械复制原图。",
-        f"历史案例主题：{brief[:160] if brief else '未记录'}",
-        f"风格关键词：{'、'.join(style_hints)}",
-        f"任务类型参考：{params.get('task', case_meta.get('task', 'poster'))}",
-        f"画面比例参考：{params.get('aspect', '未记录')}",
-        f"设计方向参考：{params.get('direction', '未记录')}",
-        f"历史评分参考：{rating}",
-        "继承重点：配色逻辑、材质质感、画面氛围、主体呈现方式、构图留白。",
-        "变化要求：根据当前新需求重新生成，不要一比一复刻历史案例。",
-    ]
-
-    if tags:
-        dna_parts.insert(4, f"案例标签：{'、'.join(str(tag) for tag in tags[:8])}")
-
-    if prompt:
-        dna_parts.append(f"历史 prompt 摘要：{prompt[:300]}")
-
-    return "\n".join(dna_parts)
+    return build_case_dna_summary_from_metadata(case_meta)
 
 
 def log(role: str, emoji: str, message: str):
@@ -617,8 +547,14 @@ def run(
     quality: str = None,
     case_id: str = None,
     reference_image_path: str = None,
+    resolved_reference_image_path: str = None,
+    reference_source_type: str = None,
     precompiled_brief: bool = False,
     dna_summary: str = None,
+    save_case: bool = True,
+    archive: bool = True,
+    archive_mode: str = "per_image",
+    request_id: str = None,
 ) -> dict:
     """
     🚀 主工作流入口（案例库版）
@@ -634,14 +570,18 @@ def run(
     forced_params_applied = False
     effective_dna_summary = str(dna_summary).strip() if dna_summary else None
     dna_summary_source = "user" if effective_dna_summary else None
+    started_at_dt = datetime.now()
+    started_at = started_at_dt.isoformat()
+    wall_start = time.perf_counter()
+    archive_enabled = bool(archive and archive_mode == "per_image")
 
     stage_status = {
         "prompt_ok": False,
         "style_ok": False,
         "generation_ok": False,
         "quality_ok": False,
-        "archive_ok": False,
-        "case_library_ok": False,
+        "archive_ok": not archive_enabled,
+        "case_library_ok": not save_case,
     }
 
     model_usage = {
@@ -713,16 +653,29 @@ def run(
     ref_src_type = None
     ref_src_value = None
     ref_src_task = None
-    if use_reference and reference_image_path:
+    ref_path = None
+    if use_reference and resolved_reference_image_path:
+        reference_image = resolved_reference_image_path
+        ref_path = resolve_project_path(resolved_reference_image_path)
+        ref_src_type = reference_source_type or ("case_id" if case_id else "local_path")
+        ref_src_value = case_id if ref_src_type == "case_id" else to_project_relative(reference_image_path or resolved_reference_image_path)
+        ref_src_task = final_task
+        if ref_path.exists():
+            log("案例库", "📚", f"使用已解析参考图: {ref_path.name}")
+        else:
+            log("案例库", "📚", f"⚠️ 已解析参考图不存在: {resolved_reference_image_path}，标记为无效参考图")
+            reference_image = None
+    elif use_reference and reference_image_path:
         reference_image = reference_image_path
         ref_path = resolve_project_path(reference_image_path)
-        ref_src_type = "local_path"
+        ref_src_type = reference_source_type or "local_path"
         ref_src_value = to_project_relative(reference_image_path)
         ref_src_task = final_task
         if ref_path.exists():
             log("案例库", "📚", f"使用本地参考图: {ref_path.name}")
         else:
             log("案例库", "📚", f"⚠️ 本地参考图不存在: {reference_image_path}，标记为无效参考图")
+            reference_image = None
     elif use_reference and case_id:
         # Try get_case_image_path first
         reference_image = get_case_image_path(case_id, final_task)
@@ -798,35 +751,47 @@ def run(
         failed_meta_path = None
         try:
             stage_status["generation_ok"] = False
-            failed_meta_path = step5_metadata(
-                user_input=user_input,
-                prompt_data=prompt_data,
-                style_data=style_data,
-                generation=generation,
-                qa=failed_qa,
-                workflow_diagnostics={
-                    "prompt_analysis_mode": prompt_analysis_mode,
-                    "style_params_mode": style_params_mode,
-                    "forced_params_applied": forced_params_applied,
-                    "final_params": {
-                        "task": final_task,
-                        "direction": final_direction,
-                        "aspect": final_aspect,
-                        "quality": final_quality,
+            if archive_enabled:
+                failed_meta_path = step5_metadata(
+                    user_input=user_input,
+                    prompt_data=prompt_data,
+                    style_data=style_data,
+                    generation=generation,
+                    qa=failed_qa,
+                    workflow_diagnostics={
+                        "prompt_analysis_mode": prompt_analysis_mode,
+                        "style_params_mode": style_params_mode,
+                        "forced_params_applied": forced_params_applied,
+                        "final_params": {
+                            "task": final_task,
+                            "direction": final_direction,
+                            "aspect": final_aspect,
+                            "quality": final_quality,
+                        },
+                        "stage_status": stage_status,
+                        "precompiled_brief": precompiled_brief,
+                        "dna_summary_included": bool(effective_dna_summary),
+                        "dna_summary_source": dna_summary_source,
+                        "failed_stage": "generation",
+                        "error": generation.get("error"),
+                        "archive_mode": archive_mode,
+                        "request_id": request_id,
                     },
-                    "stage_status": stage_status,
-                    "precompiled_brief": precompiled_brief,
-                    "dna_summary_included": bool(effective_dna_summary),
-                    "dna_summary_source": dna_summary_source,
-                    "failed_stage": "generation",
-                    "error": generation.get("error"),
-                },
-                model_usage=model_usage,
-                dna_summary=effective_dna_summary,
-            )
+                    model_usage=model_usage,
+                    dna_summary=effective_dna_summary,
+                )
+                stage_status["archive_ok"] = True
         except Exception as e:
             print(f"[WARN] Failed to write failure archive: {e}")
 
+        finished_at = datetime.now().isoformat()
+        duration_sec = round(time.perf_counter() - wall_start, 3)
+        reference_details = {
+            "source_type": ref_src_type or ("case_id" if case_id else "local_path" if reference_image_path or resolved_reference_image_path else "none"),
+            "case_id": case_id,
+            "resolved_image_path": to_project_relative(reference_image) if reference_image else None,
+            "dna_summary_included": bool(effective_dna_summary),
+        }
         return {
             "success": False,
             "stage": "generation",
@@ -834,6 +799,12 @@ def run(
             "filepath": None,
             "used_reference": generation.get("used_reference", False),
             "archive_path": failed_meta_path,
+            "reference": reference_details,
+            "timing": {
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "duration_sec": duration_sec,
+            },
             "workflow_diagnostics": {
                 "prompt_analysis_mode": prompt_analysis_mode,
                 "style_params_mode": style_params_mode,
@@ -848,6 +819,8 @@ def run(
                 "precompiled_brief": precompiled_brief,
                 "dna_summary_included": bool(effective_dna_summary),
                 "dna_summary_source": dna_summary_source,
+                "archive_mode": archive_mode,
+                "request_id": request_id,
             },
         }
 
@@ -877,47 +850,53 @@ def run(
     }
 
     # Step 5: 档案（先设置 stage_ok，再写入 archive）
-    try:
-        stage_status["archive_ok"] = True
-        meta_path = step5_metadata(
-            user_input,
-            prompt_data,
-            style_data,
-            generation,
-            qa,
-            workflow_diagnostics=workflow_diagnostics,
-            model_usage=model_usage,
-            dna_summary=effective_dna_summary,
-        )
-    except Exception as e:
-        stage_status["archive_ok"] = False
-        meta_path = None
-        print(f"[WARN] archive failed: {e}")
+    meta_path = None
+    if archive_enabled:
+        try:
+            stage_status["archive_ok"] = True
+            meta_path = step5_metadata(
+                user_input,
+                prompt_data,
+                style_data,
+                generation,
+                qa,
+                workflow_diagnostics=workflow_diagnostics,
+                model_usage=model_usage,
+                dna_summary=effective_dna_summary,
+            )
+        except Exception as e:
+            stage_status["archive_ok"] = False
+            meta_path = None
+            print(f"[WARN] archive failed: {e}")
     print()
 
     # 案例库保存
-    try:
-        case_meta = {
-            "brief": user_input,
-            "prompt": generation.get("final_prompt", ""),
-            "params": {
-                "task": final_task,
-                "direction": final_direction,
-                "aspect": final_aspect,
-                "quality": final_quality,
-            },
-            "rating": qa.get("score", 0),
-        }
-        add_case(
-            image_path=generation["filepath"],
-            metadata=case_meta,
-            task=final_task,
-            tags=[],
-        )
+    if save_case:
+        try:
+            case_meta = {
+                "brief": user_input,
+                "prompt": generation.get("final_prompt", ""),
+                "params": {
+                    "task": final_task,
+                    "direction": final_direction,
+                    "aspect": final_aspect,
+                    "quality": final_quality,
+                },
+                "rating": qa.get("score", 0),
+            }
+            add_case(
+                image_path=generation["filepath"],
+                metadata=case_meta,
+                task=final_task,
+                tags=[],
+            )
+            stage_status["case_library_ok"] = True
+            print("[案例库] ✅ 案例已保存")
+        except Exception as e:
+            print(f"[案例库] ⚠️ 保存失败: {e}")
+    else:
         stage_status["case_library_ok"] = True
-        print("[案例库] ✅ 案例已保存")
-    except Exception as e:
-        print(f"[案例库] ⚠️ 保存失败: {e}")
+        print("[案例库] ⏭️ 已跳过（save_case=False）")
 
     print("=" * 70)
     print("✅ 任务完成!")
@@ -950,6 +929,15 @@ def run(
         print(f"🔗 {url[:50]}...")
         print("⚠️  链接24h有效")
 
+    finished_at = datetime.now().isoformat()
+    duration_sec = round(time.perf_counter() - wall_start, 3)
+    reference_details = {
+        "source_type": ref_src_type or ("case_id" if case_id else "local_path" if reference_image_path or resolved_reference_image_path else "none"),
+        "case_id": case_id,
+        "resolved_image_path": to_project_relative(reference_image) if reference_image else None,
+        "dna_summary_included": bool(effective_dna_summary),
+    }
+
     return {
         "success": True,
         "filepath": result_filepath,
@@ -962,6 +950,12 @@ def run(
             "quality": final_quality,
         },
         "used_reference": generation.get("used_reference", False),
+        "reference": reference_details,
+        "timing": {
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "duration_sec": duration_sec,
+        },
         "workflow_diagnostics": {
             "prompt_analysis_mode": prompt_analysis_mode,
             "style_params_mode": style_params_mode,
@@ -971,8 +965,10 @@ def run(
             "precompiled_brief": precompiled_brief,
             "dna_summary_included": bool(effective_dna_summary),
             "dna_summary_source": dna_summary_source,
+            "archive_mode": archive_mode,
+            "request_id": request_id,
         },
-        "partial_failure": not stage_status["archive_ok"] or not stage_status["case_library_ok"],
+        "partial_failure": False if (not archive_enabled and not save_case) else (not stage_status["archive_ok"] or not stage_status["case_library_ok"]),
         "failed_stage": (
             None if stage_status["archive_ok"] and stage_status["case_library_ok"]
             else "archive_or_case_library"

@@ -188,7 +188,7 @@ def _build_dna_from_rules(brief: str, skin_tone: str = None, nail_length: str = 
 
 
 def build_visual_dna(user_input, reference_image_path: str = None,
-                     case_id: str = None) -> VisualDNA:
+                     case_id: str = None, reference_context=None) -> VisualDNA:
     """
     从用户输入构建 VisualDNA。
     
@@ -208,6 +208,10 @@ def build_visual_dna(user_input, reference_image_path: str = None,
     nail_shape = getattr(user_input, 'nail_shape', None) or None
     style_id = getattr(user_input, 'style_id', None) or None
     
+    if reference_context is not None:
+        reference_image_path = reference_context.resolved_image_path or reference_context.reference_image_path
+        case_id = reference_context.case_id
+
     # 1. 有参考图时，从参考图提取
     if reference_image_path:
         try:

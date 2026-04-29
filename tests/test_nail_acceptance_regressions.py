@@ -3,7 +3,7 @@ import shutil
 import unittest
 import uuid
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from project_paths import PROJECT_ROOT, resolve_project_path, to_project_relative
 from verticals.nail.note_image_generator import _generate_single_page
@@ -75,7 +75,7 @@ class NailAcceptanceRegressionTests(unittest.TestCase):
         page.prompt = page.prompt or f"prompt_{page.page_no}"
         return page
 
-    def _fake_generate_images(self, package, user_input):
+    def _fake_generate_images(self, package, user_input, reference_context=None):
         note_dir = resolve_project_path(package.output_dir)
         note_dir.mkdir(parents=True, exist_ok=True)
         for page in package.pages:
@@ -197,12 +197,62 @@ class NailAcceptanceRegressionTests(unittest.TestCase):
             return {"filepath": str(source_image)}
 
         with patch("orchestrator_v2.run", side_effect=fake_run):
-            updated_page = _generate_single_page(page, user_input, note_dir)
+            updated_page, _ = _generate_single_page(page, user_input, note_dir)
 
         self.assertEqual(run_kwargs["case_id"], "case_test_001")
         self.assertTrue(run_kwargs["use_reference"])
+        self.assertEqual(run_kwargs["save_case"], False)
+        self.assertEqual(run_kwargs["archive_mode"], "note_only")
         self.assertEqual(updated_page.status, "generated")
         self.assertTrue(updated_page.image_path)
+
+    def test_orchestrator_skip_case_library_when_save_case_false(self):
+        import orchestrator_v2
+
+        with patch("orchestrator_v2.step3_image_generator", return_value={"status": "success", "filepath": __file__, "url": None, "used_reference": False}), \
+             patch("orchestrator_v2.step4_qa", return_value={"verdict": "PASS", "score": 9.0, "approval": True}), \
+             patch("orchestrator_v2.step5_metadata") as mock_step5, \
+             patch("orchestrator_v2.add_case") as mock_add_case:
+            result = orchestrator_v2.run(
+                user_input="test prompt",
+                use_reference=False,
+                task="poster",
+                direction="balanced",
+                aspect="3:4",
+                quality="draft",
+                precompiled_brief=True,
+                save_case=False,
+                archive=False,
+                archive_mode="none",
+            )
+
+        self.assertTrue(result["success"])
+        mock_add_case.assert_not_called()
+        mock_step5.assert_not_called()
+
+    def test_orchestrator_archive_mode_none_skips_archive_write(self):
+        import orchestrator_v2
+
+        with patch("orchestrator_v2.step3_image_generator", return_value={"status": "success", "filepath": __file__, "url": None, "used_reference": False}), \
+             patch("orchestrator_v2.step4_qa", return_value={"verdict": "PASS", "score": 9.0, "approval": True}), \
+             patch("orchestrator_v2.step5_metadata") as mock_step5, \
+             patch("orchestrator_v2.add_case") as mock_add_case:
+            result = orchestrator_v2.run(
+                user_input="test prompt",
+                use_reference=False,
+                task="poster",
+                direction="balanced",
+                aspect="3:4",
+                quality="draft",
+                precompiled_brief=True,
+                save_case=False,
+                archive=True,
+                archive_mode="none",
+            )
+
+        self.assertTrue(result["success"])
+        mock_step5.assert_not_called()
+        mock_add_case.assert_not_called()
 
     def test_qa_checks_generated_page_image_paths(self):
         assets_dir = self._make_output_dir("qa_generated_paths")

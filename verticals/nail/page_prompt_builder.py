@@ -85,60 +85,52 @@ def _compose_prompt_parts(
     组合 Prompt 各部分。
     返回 {'prompt': str, 'negative_prompt': str}
     """
-    parts = []
-
-    # 1. 简短目标说明
-    if page_goal:
-        parts.append(f"目标：{page_goal}。")
-
-    # 2. 角色前缀
     role_prefix = _ROLE_PROMPTS.get(role, "小红书美甲图片。")
-    parts.append(role_prefix)
 
-    # 3. 用户原始需求
+    shared_visual = ["【共享视觉DNA】"]
     if brief:
-        parts.append(f"用户需求：{brief}。")
-
-    # 4. 视觉简报
-    if visual_brief:
-        parts.append(f"视觉简报：{visual_brief}。")
-
-    # 5. 手型/肤色
+        shared_visual.append("用户需求：{brief}".format(brief=brief))
     if visual_dna.hand_model:
-        parts.append(f"手型：{visual_dna.hand_model}。")
+        shared_visual.append("手型：{value}".format(value=visual_dna.hand_model))
     if visual_dna.skin_tone:
-        parts.append(f"肤色：{visual_dna.skin_tone}。")
-
-    # 6. 甲型/甲长
+        shared_visual.append("肤色：{value}".format(value=visual_dna.skin_tone))
     if visual_dna.nail_shape:
-        parts.append(f"甲型：{visual_dna.nail_shape}。")
+        shared_visual.append("甲型：{value}".format(value=visual_dna.nail_shape))
     if visual_dna.nail_length:
-        parts.append(f"甲长：{visual_dna.nail_length}。")
-
-    # 7. 颜色/质感
+        shared_visual.append("甲长：{value}".format(value=visual_dna.nail_length))
     if visual_dna.main_color:
-        parts.append(f"主色调：{visual_dna.main_color}。")
+        shared_visual.append("主色：{value}".format(value=visual_dna.main_color))
     if visual_dna.finish:
-        parts.append(f"质感：{visual_dna.finish}。")
-
-    # 8. 光线/背景
+        shared_visual.append("质感：{value}".format(value=visual_dna.finish))
     if visual_dna.lighting:
-        parts.append(f"光线：{visual_dna.lighting}。")
+        shared_visual.append("光线：{value}".format(value=visual_dna.lighting))
     if visual_dna.background:
-        parts.append(f"背景：{visual_dna.background}。")
-
-    # 9. 风格
+        shared_visual.append("背景：{value}".format(value=visual_dna.background))
     if visual_dna.style:
-        parts.append(f"风格：{visual_dna.style}。")
+        shared_visual.append("风格：{value}".format(value=visual_dna.style))
+    shared_visual.append("参考图继承要求：如存在参考图，继承配色逻辑、材质质感与构图氛围，但不要机械复制。")
 
-    # 10. 文字叠加（封面/总结页）
+    page_goal_lines = [
+        "【当前页面目标】",
+        "page role: {role}".format(role=role.value if hasattr(role, "value") else role),
+        "角色描述：{prefix}".format(prefix=role_prefix),
+    ]
+    if page_goal:
+        page_goal_lines.append("page goal: {goal}".format(goal=page_goal))
+    if visual_brief:
+        page_goal_lines.append("visual brief: {brief}".format(brief=visual_brief))
+
+    output_requirements = [
+        "【输出要求】",
+        "小红书图文风格",
+        "高质感",
+        "无水印",
+        "不要错误文字",
+    ]
     if allow_text and text_overlay:
-        parts.append(f"图片上方或下方可添加文字区域，内容为：「{text_overlay}」。文字需清晰可读。")
+        output_requirements.append("如需排版，可预留清晰文字区域，建议文案：{text}".format(text=text_overlay))
 
-    # 11. 小红书风格要求
-    parts.append("小红书图文风格，画面精美，高质感，无水印。")
-
-    prompt = " ".join(parts)
+    prompt = "\n".join(shared_visual + [""] + page_goal_lines + [""] + output_requirements)
     negative = _build_negative_prompt(visual_dna, role)
 
     return {"prompt": prompt, "negative_prompt": negative}

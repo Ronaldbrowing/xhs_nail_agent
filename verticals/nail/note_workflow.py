@@ -3,6 +3,7 @@ NailNoteWorkflow - 小红书美甲图文笔记生产工作流
 顶层编排入口
 """
 from datetime import datetime
+import time
 
 from .note_workflow_schemas import (
     NailNoteUserInput, NailNotePackage, VisualDNA, NotePageSpec,
@@ -18,6 +19,17 @@ from . import tag_generator
 from . import comment_hook_generator
 from . import note_qa as note_qa_module
 from . import package_writer
+from .reference_context import build_reference_context, reference_context_to_diagnostics
+
+
+def _safe_isoformat(value) -> str:
+    try:
+        formatted = value.isoformat()
+    except Exception:
+        formatted = str(value)
+    if isinstance(formatted, str):
+        return formatted
+    return str(formatted)
 
 
 class NailNoteWorkflow:
@@ -60,6 +72,9 @@ class NailNoteWorkflow:
         style_id = user_input.style_id or "default"
         note_goal = user_input.note_goal or "seed"
         page_count = user_input.page_count or 6
+        workflow_started_at_dt = datetime.now()
+        workflow_started_at = _safe_isoformat(workflow_started_at_dt)
+        workflow_wall_start = time.perf_counter()
         
         # 日志头部
         print("=" * 70)
@@ -90,17 +105,32 @@ class NailNoteWorkflow:
             success=False,
             partial_failure=False,
         )
+        package.diagnostics["page_timings"] = []
+        package.diagnostics["timing"] = {
+            "workflow_started_at": workflow_started_at,
+            "workflow_finished_at": None,
+            "workflow_duration_sec": None,
+            "image_generation_duration_sec": 0.0,
+            "avg_page_generation_sec": 0.0,
+        }
+        package.diagnostics["generation_mode"] = {
+            "concurrency": "sequential",
+            "max_workers": max(1, min(int(getattr(user_input, "max_workers", 1) or 1), 3)),
+            "quality": getattr(user_input, "quality", "final") or "final",
+            "aspect": getattr(user_input, "aspect", "3:4") or "3:4",
+        }
+
+        reference_context = build_reference_context(user_input, task="poster")
+        package.diagnostics["reference"] = reference_context_to_diagnostics(reference_context)
 
         # 1. 构建 VisualDNA
         print("[视觉DNA] 🔄 构建视觉DNA...")
         try:
-            reference_path = user_input.reference_image_path
-            case_id = user_input.case_id
-            
             dna = visual_dna_builder.build_visual_dna(
                 user_input,
-                reference_image_path=reference_path,
-                case_id=case_id,
+                reference_image_path=reference_context.reference_image_path,
+                case_id=reference_context.case_id,
+                reference_context=reference_context,
             )
             package.visual_dna = dna
             
@@ -235,9 +265,23 @@ class NailNoteWorkflow:
         # 9. 生成图片（如果需要）
         if user_input.generate_images:
             print("[图片生成] 🔄 开始生成图片...")
+            image_generation_start = time.perf_counter()
             try:
                 from .note_image_generator import generate_note_images
-                gen_result = generate_note_images(package, user_input)
+                generate_note_images(package, user_input, reference_context=reference_context)
+                image_generation_duration_sec = round(time.perf_counter() - image_generation_start, 3)
+                page_timings = package.diagnostics.get("page_timings", [])
+                avg_page_generation_sec = 0.0
+                if page_timings:
+                    avg_page_generation_sec = round(
+                        sum(item.get("duration_sec", 0.0) for item in page_timings) / len(page_timings),
+                        3,
+                    )
+                package.diagnostics["timing"]["image_generation_duration_sec"] = image_generation_duration_sec
+                package.diagnostics["timing"]["avg_page_generation_sec"] = avg_page_generation_sec
+                package.diagnostics["generation_mode"]["concurrency"] = (
+                    "parallel" if package.diagnostics["generation_mode"]["max_workers"] > 1 else "sequential"
+                )
                 print(f"[图片生成] ✅ 图片生成完成")
                 for page in package.pages:
                     if page.status == "generated":
@@ -316,7 +360,11 @@ class NailNoteWorkflow:
             if qa_result['issues']:
                 for issue in qa_result['issues']:
                     print(f"   - {issue}")
+            if qa_result.get("warnings"):
+                for warning in qa_result["warnings"]:
+                    print(f"   ! {warning}")
             package.diagnostics["qa_score"] = qa_result['score']
+            package.diagnostics["qa"] = qa_result
             ok = package_writer.write_note_package(package, output_dir)
             if not ok:
                 print("[QA检查] ⚠️ QA 结果回写失败")
@@ -327,6 +375,12 @@ class NailNoteWorkflow:
             if not ok:
                 print("[QA检查] ⚠️ QA 异常信息回写失败")
         print()
+
+        workflow_finished_at = _safe_isoformat(datetime.now())
+        workflow_duration_sec = round(time.perf_counter() - workflow_wall_start, 3)
+        package.diagnostics["timing"]["workflow_finished_at"] = workflow_finished_at
+        package.diagnostics["timing"]["workflow_duration_sec"] = workflow_duration_sec
+        package_writer.write_note_package(package, output_dir)
 
         print("=" * 70)
         print(f"💅 生成完成 | success={package.success} | partial_failure={package.partial_failure}")

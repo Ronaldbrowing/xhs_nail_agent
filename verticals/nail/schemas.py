@@ -47,6 +47,7 @@ class UserInput(NailNoteUserInput):
         quality: str = "final",
         aspect: str = "3:4",
         direction: str = "balanced",
+        max_workers: int = 1,
         **kwargs,
     ):
         super().__init__(
@@ -67,6 +68,7 @@ class UserInput(NailNoteUserInput):
             quality=quality,
             aspect=aspect,
             direction=direction,
+            max_workers=max_workers,
             color_preferences=color_preferences,
             avoid_elements=avoid_elements,
             audience=audience,
