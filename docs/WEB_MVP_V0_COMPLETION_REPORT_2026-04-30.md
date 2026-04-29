@@ -154,8 +154,11 @@ Web MVP v0 ✅ 全部功能完成并验证通过
 | P1 | job_store 持久化 | SQLite 或 JSON 文件，解决服务重启丢失 |
 | P2 | 参考图视觉 DNA 分析 | 当前只从 metadata 文本提取关键词，未读取参考图视觉特征 |
 | P3 | 多行业场景切换 | 美甲垂类稳定后扩展 |
-| P4 | 真实图片生成完整 E2E | 已有 6 页图片生成成功记录（job_a137f28f33bf），可验证生成图片的显示 |
+| P4 | 真实图片生成完整 E2E | ✅ 已完成 — job 404 时 fallback 到 note_id/package 恢复 6 张图片，服务重启后验证通过 |
+
+**2026-04-30 07:00 更新**：P4 已完成。fallback 机制已补全，当 `/api/jobs/{jobId}` 返回 404 但 localStorage 中存在 `noteId` 时，前端自动调用 `/api/nail/notes/{noteId}/package` 恢复展示。
 
 ---
 
 *报告生成时间：2026-04-30 凌晨 02:00 左右*
+*最后更新：2026-04-30 07:00（第七部分 P4 标记完成，commit 6aa068e）*

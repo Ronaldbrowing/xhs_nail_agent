@@ -1001,14 +1001,19 @@ location.reload();
 Web MVP v0 验收通过（真实图片恢复展示 ✅、参考图上传 ✅、case_id ✅、最近任务列表 ✅）
 ```
 
-### 18.4 待完成事项
+### 18.4 当前待完成事项（截至 2026-04-30 07:00）
 
-- Git commit + push 所有改动
-- 文档同步更新到最新状态
-- E2E 验证新任务提交（payload 含 reference_image_path + case_id）
-- python-multipart 加入项目依赖（requirements.txt 或 pyproject.toml）
-- job_store 持久化（服务重启后 job_id 仍有效）
-- 多行业场景切换
+| 事项 | 状态 | 说明 |
+|------|------|------|
+| Git commit + push 所有改动 | ✅ 已完成 | commit `6aa068e` 已推送 origin/main |
+| 文档同步更新到最新状态 | ✅ 已完成 | docs 目录两个文件均已存在并记录最新状态 |
+| E2E 验证新任务提交（payload 含 reference_image_path + case_id） | ✅ 已完成 | 浏览器拦截器 + curl 双重验证通过 |
+| python-multipart 加入项目依赖 | ✅ 已完成 | requirements.txt 已含 `python-multipart==0.0.20` |
+| job_store 持久化（服务重启后 job_id 仍有效） | ❌ 未完成 | 内存态；fallback 机制可绕过但非彻底解决方案 |
+| 多行业场景切换 | ❌ 未开始 | 美甲垂类 MVP 阶段不涉及 |
+| 页面端真实图片成功任务恢复展示 | ✅ 已完成 | fallback 已实现并通过 E2E 验证 |
+
+**结论**：原始要求第一项（页面端真实图片恢复展示）的 fallback 机制已补全并验证通过。section 18.3 与 18.4 状态矛盾问题已修正。
 
 ---
 
