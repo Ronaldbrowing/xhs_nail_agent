@@ -64,6 +64,7 @@ def generate_caption(user_input, visual_dna: VisualDNA, pages: List[NotePageSpec
             response = client.chat.completions.create(
                 model=get_text_model("copy_small"),
                 messages=[{"role": "user", "content": prompt}],
+                stream=False,
                 temperature=0.7,
                 max_tokens=1200,
             )

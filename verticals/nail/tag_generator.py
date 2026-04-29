@@ -67,6 +67,7 @@ def generate_tags(user_input, visual_dna: VisualDNA, count: int = 20) -> List[st
             response = client.chat.completions.create(
                 model=get_text_model("tag_small"),
                 messages=[{"role": "user", "content": prompt}],
+                stream=False,
                 temperature=0.5,
                 max_tokens=400,
             )

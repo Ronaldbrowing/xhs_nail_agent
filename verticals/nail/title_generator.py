@@ -74,6 +74,7 @@ def generate_title_candidates(user_input, visual_dna: VisualDNA, count: int = 12
             response = client.chat.completions.create(
                 model=get_text_model("copy_small"),
                 messages=[{"role": "user", "content": prompt}],
+                stream=False,
                 temperature=0.8,
                 max_tokens=600,
             )

@@ -141,6 +141,7 @@ def _build_dna_from_llm(brief: str, skin_tone: str = None, nail_length: str = No
             response = client.chat.completions.create(
                 model=get_text_model("vision_small"),
                 messages=[{"role": "user", "content": prompt}],
+                stream=False,
                 temperature=0.3,
                 max_tokens=500,
             )

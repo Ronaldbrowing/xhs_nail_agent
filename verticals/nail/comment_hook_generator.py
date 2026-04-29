@@ -59,6 +59,7 @@ def generate_comment_hooks(user_input, visual_dna: VisualDNA, count: int = 4) ->
             response = client.chat.completions.create(
                 model=get_text_model("hook_small"),
                 messages=[{"role": "user", "content": prompt}],
+                stream=False,
                 temperature=0.8,
                 max_tokens=300,
             )

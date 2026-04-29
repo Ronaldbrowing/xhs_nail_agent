@@ -42,6 +42,7 @@ def _generate_visual_brief_llm(role: PageRole, brief: str, visual_dna: VisualDNA
         response = client.chat.completions.create(
             model=get_text_model("planner_small"),
             messages=[{"role": "user", "content": prompt}],
+            stream=False,
             temperature=0.3,
             max_tokens=100,
         )
@@ -176,6 +177,7 @@ caption: <配文>
         response = client.chat.completions.create(
             model=get_text_model("planner_small"),
             messages=[{"role": "user", "content": prompt}],
+            stream=False,
             temperature=0.3,
             max_tokens=150,
         )

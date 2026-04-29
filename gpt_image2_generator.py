@@ -79,6 +79,32 @@ def _get_bytes_via_curl(url: str, headers: dict = None, timeout: int = 60) -> by
     return result.stdout
 
 
+def _get_json(base_url: str, path: str, api_key: str, timeout: int = 60):
+    """GET JSON from API."""
+    full_url = f"{base_url}{path}"
+    cmd = [
+        "curl", "-s", "--max-time", str(timeout),
+        "-X", "GET", full_url,
+        "-H", f"Authorization: Bearer {api_key}",
+    ]
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=False,
+        timeout=timeout + 5,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
+        raise RuntimeError(f"curl GET json failed: returncode={result.returncode}, stderr={stderr[:500]}")
+
+    raw = result.stdout
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Invalid JSON from API (len={len(raw)}): {e}, raw={raw[:500]}")
+
+
 def require_api_key(api_key: str = None) -> str:
     """Return the active provider API key or fail with a clear message."""
     resolved = api_key or get_image_settings()["api_key"]
@@ -187,7 +213,7 @@ def query_task(task_id: str, api_key: str = None):
     """
     api_key = require_api_key(api_key)
     
-    result = _post_json(get_api_base(), f"/tasks/{task_id}", api_key, {}, timeout=30)
+    result = _get_json(get_api_base(), f"/tasks/{task_id}", api_key, timeout=30)
     return result
 
 
@@ -277,13 +303,22 @@ def generate_image(prompt: str, size: str = "1:1", save_dir: str = None,
         
         result = query_task(task_id, api_key)
         
-        status = result.get("status", "")
+        task_data = result.get("data", result)
+        status = task_data.get("status", "")
         print(f"   ⏳ 状态: {status} ({int(elapsed)}s)")
         
         if status == "completed":
-            data = result.get("data", [{}])[0]
-            b64_json = data.get("b64_json")
-            image_url = data.get("url")
+            result_data = task_data.get("result", {}) if isinstance(task_data, dict) else {}
+            images = result_data.get("images") or []
+            first = images[0] if images else {}
+            b64_json = task_data.get("b64_json")
+            image_url = None
+            if isinstance(first, dict):
+                url_value = first.get("url")
+                if isinstance(url_value, list) and url_value:
+                    image_url = url_value[0]
+                elif isinstance(url_value, str):
+                    image_url = url_value
             
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
@@ -307,6 +342,7 @@ def generate_image(prompt: str, size: str = "1:1", save_dir: str = None,
                     "mode": "async",
                     "local_path": filepath,
                     "url": image_url,
+                    "actual_time": task_data.get("actual_time"),
                 }
         
         elif status in ("failed", "error"):

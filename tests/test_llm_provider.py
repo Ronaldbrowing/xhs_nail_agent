@@ -123,6 +123,7 @@ class LLMProviderTests(unittest.TestCase):
 
             self.assertEqual(captured["client_kwargs"]["base_url"], "https://api.apimart.ai/v1")
             self.assertEqual(captured["request_kwargs"]["model"], "claude-sonnet-4.5")
+            self.assertFalse(captured["request_kwargs"]["stream"])
             self.assertEqual(len(titles), 10)
 
     def test_submit_task_uses_provider_backed_image_settings(self):
@@ -148,6 +149,46 @@ class LLMProviderTests(unittest.TestCase):
             self.assertEqual(captured["base_url"], "https://api.apimart.ai/v1")
             self.assertEqual(captured["api_key"], "test-apimart-key")
             self.assertEqual(captured["data"]["model"], "gpt-image-2")
+
+    def test_generate_image_parses_apimart_task_status_and_result_shape(self):
+        submit_calls = {"count": 0}
+
+        def fake_submit(prompt, size="1:1", api_key=None):
+            submit_calls["count"] += 1
+            return {"success": True, "task_id": "task_123", "mode": "async"}
+
+        def fake_query(task_id, api_key=None):
+            return {
+                "code": 200,
+                "data": {
+                    "status": "completed",
+                    "actual_time": 19,
+                    "result": {
+                        "images": [
+                            {
+                                "url": ["https://example.com/fake-image.png"],
+                            }
+                        ]
+                    },
+                },
+            }
+
+        with self._clear_env():
+            os.environ["LLM_PROVIDER"] = "apimart"
+            os.environ["APIMART_API_KEY"] = "test-apimart-key"
+
+            from gpt_image2_generator import generate_image
+
+            with patch("gpt_image2_generator.submit_task", side_effect=fake_submit), \
+                 patch("gpt_image2_generator.query_task", side_effect=fake_query), \
+                 patch("gpt_image2_generator.download_image", return_value="/tmp/fake-image.png"), \
+                 patch("gpt_image2_generator.time.sleep", return_value=None):
+                result = generate_image("test prompt", size="3:4", save_dir="/tmp")
+
+            self.assertEqual(submit_calls["count"], 1)
+            self.assertEqual(result["status"], "success")
+            self.assertEqual(result["mode"], "async")
+            self.assertEqual(result["url"], "https://example.com/fake-image.png")
 
 
 if __name__ == "__main__":

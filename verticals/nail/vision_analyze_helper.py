@@ -70,6 +70,7 @@ def analyze_image_for_dna(image_path: str) -> Optional[VisualDNA]:
                     ]
                 }
             ],
+            stream=False,
             max_tokens=800,
         )
         text = response.choices[0].message.content.strip()
