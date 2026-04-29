@@ -230,6 +230,19 @@ select:disabled {
   box-shadow: var(--shadow-soft);
 }
 
+.ghost-button {
+  min-width: auto;
+  padding: 10px 14px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.ghost-button:hover {
+  background: #f4f4f5;
+}
+
 .helper-copy,
 .field-help {
   margin: 0;
