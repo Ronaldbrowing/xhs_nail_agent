@@ -11,7 +11,7 @@ import requests
 from project_paths import OUTPUT_DIR
 
 
-API_BASE = os.getenv("APIMART_API_BASE", "https://api.apimart.ai")
+API_BASE = os.getenv("APIMART_API_BASE", "https://new.apipudding.com")
 
 
 def get_api_key() -> str:
