@@ -150,31 +150,45 @@
       return err;
     }
     if (err instanceof Error) {
-      return err.message || err.toString();
+      if (err.message && typeof err.message === "string") {
+        return err.message;
+      }
+      try { return String(err.message); } catch (_) { return err.toString(); }
     }
     if (typeof err === "object") {
-      if (err.message) {
-        return typeof err.message === "string" ? err.message : JSON.stringify(err.message);
+      if (err.message && typeof err.message === "string") {
+        return err.message;
       }
       if (err.detail) {
-        return typeof err.detail === "string" ? err.detail : JSON.stringify(err.detail);
+        return typeof err.detail === "string" ? err.detail : String(err.detail);
       }
-      return JSON.stringify(err);
+      try {
+        return JSON.stringify(err);
+      } catch (_) {
+        return String(err);
+      }
     }
-    return String(err);
+    try { return String(err); } catch (_) { return "未知错误"; }
   }
 
   function setJobMeta(payload) {
     if (typeof payload === "string") {
       jobMeta.textContent = payload;
-    } else {
-      const safePayload = JSON.parse(JSON.stringify(payload, function (k, v) {
-        if (v instanceof Error) {
-          return { message: v.message, name: v.name };
-        }
-        return v;
-      }));
-      jobMeta.textContent = JSON.stringify(safePayload, null, 2);
+    } else if (payload) {
+      try {
+        const safePayload = JSON.parse(JSON.stringify(payload, function (k, v) {
+          if (v instanceof Error) {
+            try { return { message: String(v.message), name: v.name }; } catch (_) { return String(v); }
+          }
+          if (typeof v === "object" && v !== null) {
+            try { return v; } catch (_) { return String(v); }
+          }
+          return v;
+        }));
+        jobMeta.textContent = JSON.stringify(safePayload, null, 2);
+      } catch (_) {
+        jobMeta.textContent = typeof payload.message === "string" ? payload.message : String(payload);
+      }
     }
   }
 
@@ -419,8 +433,6 @@
     setJobMeta({
       job_id: job.job_id,
       note_id: packageData.note_id,
-      output_dir: packageData.output_dir,
-      package_path: packageData.package_path,
       qa_score: packageData.diagnostics ? packageData.diagnostics.qa_score : null,
       error: job.error || null,
     });
@@ -443,7 +455,11 @@
       payload = null;
     }
     if (!response.ok) {
-      throw new Error(payload && payload.detail ? payload.detail : "request failed");
+      const err = new Error(payload && payload.detail ? payload.detail : "request failed");
+      err.status = response.status;
+      err.payload = payload;
+      err.url = url;
+      throw err;
     }
     return payload;
   }
@@ -548,22 +564,24 @@
 
         await renderSucceededJob(result.job, jobContext.generateImages);
       } catch (error) {
-        clearLastJob();
-        const isNotFound = error.message && (
-          error.message.includes("404") ||
-          error.message.includes("Not Found") ||
-          error.message.includes("找不到")
-        );
+        const isNotFound = error.status === 404 ||
+          (error.message && (
+            error.message.includes("404") ||
+            error.message.toLowerCase().includes("not found") ||
+            error.message.includes("找不到")
+          ));
         if (isNotFound) {
+          clearLastJob();
           applyStatus("failed", "无法找到上次任务");
           resultMeta.textContent = "无法找到上次任务，可能已过期或被清除。";
           setJobMeta({ error: formatError(error), note: "任务不存在或已失效" });
+          hideResumePanel();
         } else {
-          applyStatus("failed", "生成失败");
-          resultMeta.textContent = "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
-          setJobMeta({ error: formatError(error) });
+          applyStatus("failed", "暂时无法查询任务");
+          resultMeta.textContent = "暂时无法查询任务，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。";
+          setJobMeta({ error: formatError(error), url: error.url || null, status: error.status || null });
+          // keep resume panel open so user can retry
         }
-        hideResumePanel();
       } finally {
         continueQueryPromise = null;
         continueButton.disabled = false;
@@ -649,9 +667,12 @@
 
       if (result.kind === "failed") {
         const job = result.job;
-        applyStatus("failed", "生成失败");
-        resultMeta.textContent = "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
-        setJobMeta(job || { job_id: created.job_id, status: "failed" });
+        const finalStatus = job && job.status === "partial_failed" ? "partial_failed" : "failed";
+        applyStatus(finalStatus);
+        resultMeta.textContent = finalStatus === "partial_failed"
+          ? "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。"
+          : "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
+        setJobMeta(job || { job_id: created.job_id, status: finalStatus });
         return;
       }
 
