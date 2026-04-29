@@ -499,12 +499,12 @@
     return payload;
   }
 
-  async function renderSucceededJob(job, generateImages) {
+  async function renderJobWithPackage(job, generateImages, statusKey, detailText) {
     if (!job.note_id) {
-      throw new Error("job succeeded but note_id is missing");
+      throw new Error("job package render requires note_id");
     }
 
-    applyStatus("succeeded", "生成完成");
+    applyStatus(statusKey, detailText);
     const packageData = await fetchJson("/api/nail/notes/" + encodeURIComponent(job.note_id) + "/package");
     saveLastJob({
       jobId: job.job_id,
@@ -513,6 +513,38 @@
     });
     renderPackage(packageData, generateImages, job);
     hideResumePanel();
+  }
+
+  async function renderSucceededJob(job, generateImages) {
+    return renderJobWithPackage(job, generateImages, "succeeded", "生成完成");
+  }
+
+  async function renderPartialFailedJob(job, generateImages) {
+    return renderJobWithPackage(
+      job,
+      generateImages,
+      "partial_failed",
+      "部分内容已生成，可先查看已有预览"
+    );
+  }
+
+  async function tryRenderPartialFailedJob(job, generateImages) {
+    try {
+      await renderPartialFailedJob(job, generateImages);
+      resultMeta.textContent = "这次任务只完成了部分内容，你可以先查看已生成的标题、正文、标签和页面结构。";
+      return true;
+    } catch (error) {
+      applyStatus("partial_failed", "部分完成，但结果包读取失败");
+      resultMeta.textContent = "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。";
+      setJobMeta({
+        job_id: job.job_id,
+        note_id: job.note_id || null,
+        error: formatError(error),
+        package_path: job.package_path || null,
+        diagnostics: job.diagnostics || null,
+      });
+      return false;
+    }
   }
 
   async function pollJob(jobId, generateImages) {
@@ -571,8 +603,18 @@
           return;
         }
 
-        if (job.status === "failed" || job.status === "partial_failed") {
-          applyStatus(job.status === "failed" ? "failed" : "partial_failed");
+        if (job.status === "partial_failed") {
+          if (job.note_id) {
+            await tryRenderPartialFailedJob(job, jobContext.generateImages);
+          } else {
+            applyStatus("partial_failed");
+            resultMeta.textContent = "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。";
+          }
+          return;
+        }
+
+        if (job.status === "failed") {
+          applyStatus("failed");
           resultMeta.textContent = "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
           return;
         }
@@ -591,9 +633,15 @@
 
         if (result.kind === "failed") {
           const failedJob = result.job;
-          applyStatus(failedJob.status === "partial_failed" ? "partial_failed" : "failed");
-          resultMeta.textContent = "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
-          setJobMeta(failedJob);
+          if (failedJob.status === "partial_failed" && failedJob.note_id) {
+            await tryRenderPartialFailedJob(failedJob, jobContext.generateImages);
+          } else {
+            applyStatus(failedJob.status === "partial_failed" ? "partial_failed" : "failed");
+            resultMeta.textContent = failedJob.status === "partial_failed"
+              ? "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。"
+              : "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
+            setJobMeta(failedJob);
+          }
           return;
         }
 
@@ -703,11 +751,15 @@
       if (result.kind === "failed") {
         const job = result.job;
         const finalStatus = job && job.status === "partial_failed" ? "partial_failed" : "failed";
-        applyStatus(finalStatus);
-        resultMeta.textContent = finalStatus === "partial_failed"
-          ? "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。"
-          : "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
-        setJobMeta(job || { job_id: created.job_id, status: finalStatus });
+        if (finalStatus === "partial_failed" && job && job.note_id) {
+          await tryRenderPartialFailedJob(job, generateImages);
+        } else {
+          applyStatus(finalStatus);
+          resultMeta.textContent = finalStatus === "partial_failed"
+            ? "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。"
+            : "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
+          setJobMeta(job || { job_id: created.job_id, status: finalStatus });
+        }
         return;
       }
 

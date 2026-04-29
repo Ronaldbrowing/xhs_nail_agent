@@ -67,6 +67,8 @@ class NailFastAPITests(unittest.TestCase):
         self.assertIn('resumePanel.removeAttribute("hidden")', js_body)
         self.assertIn('resumePanel.style.display = ""', js_body)
         self.assertIn('console.error("resume-panel element is missing"', js_body)
+        self.assertIn("renderPartialFailedJob", js_body)
+        self.assertIn("部分完成，但结果包读取失败", js_body)
 
         css_response = self.client.get("/web/style.css")
         self.assertEqual(css_response.status_code, 200)

@@ -36,3 +36,4 @@ class JobStatusResponse(_Model):
     finished_at: Optional[str] = None
     error: Optional[str] = None
     payload: Dict[str, Any] = {}
+    diagnostics: Optional[Dict[str, Any]] = None

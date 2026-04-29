@@ -9,6 +9,32 @@ from .job_store import create_job, update_job
 from .schemas import NailNoteCreateRequest, NailNoteCreateResponse, NailNotePageResponse
 
 
+def _normalize_issue_text(text: str) -> str:
+    if not text:
+        return text
+    if "Missing API key for provider=" in text:
+        return "图片生成服务未配置 API Key"
+    return text
+
+
+def _package_error_summary(package: NailNotePackage) -> Optional[str]:
+    diagnostics = dict(getattr(package, "diagnostics", {}) or {})
+    qa = diagnostics.get("qa") or {}
+    qa_issues = qa.get("issues") or []
+    if qa_issues:
+        return _normalize_issue_text(str(qa_issues[0]))
+
+    for page in getattr(package, "pages", []) or []:
+        issues = list(getattr(page, "issues", []) or [])
+        if issues:
+            return _normalize_issue_text(str(issues[0]))
+
+    failed_reason = diagnostics.get("failed_reason")
+    if failed_reason:
+        return str(failed_reason)
+    return None
+
+
 def _package_status(package: NailNotePackage) -> str:
     if package.success and package.partial_failure:
         return "partial_failed"
@@ -81,6 +107,8 @@ def create_nail_note(request: NailNoteCreateRequest, request_id: Optional[str] =
             note_id=package.note_id,
             package_path=package.package_path,
             output_dir=package.output_dir,
+            error=_package_error_summary(package),
+            diagnostics=dict(getattr(package, "diagnostics", {}) or {}),
             finished_at=datetime.now().isoformat(),
         )
         return build_create_response(request_id=request_id, package=package, status=status, errors=[])
