@@ -1,4 +1,5 @@
 import json
+import re
 import threading
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from .schemas import HealthResponse, JobCreatedResponse, JobStatusResponse
 
 
 router = APIRouter()
+_NOTE_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _run_create_job(job_id: str, request: NailNoteCreateRequest) -> None:
@@ -21,7 +23,19 @@ def _run_create_job(job_id: str, request: NailNoteCreateRequest) -> None:
 
 
 def _package_path_for_note(note_id: str) -> Path:
+    if not _NOTE_ID_RE.fullmatch(note_id or ""):
+        raise ValueError("invalid note_id")
     return resolve_project_path("output/{note_id}/note_package.json".format(note_id=note_id))
+
+
+def _ensure_output_path(path: Path) -> Path:
+    resolved = path.resolve()
+    output_root = OUTPUT_DIR.resolve()
+    try:
+        resolved.relative_to(output_root)
+    except ValueError:
+        raise ValueError("path escapes output directory")
+    return resolved
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -51,11 +65,17 @@ def get_job_status(job_id: str) -> JobStatusResponse:
 
 @router.get("/api/nail/notes/{note_id}/package")
 def get_note_package(note_id: str):
-    package_path = _package_path_for_note(note_id)
+    try:
+        package_path = _ensure_output_path(_package_path_for_note(note_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     if not package_path.exists():
         job = find_job_by_note_id(note_id)
         if job and job.get("package_path"):
-            package_path = resolve_project_path(job["package_path"])
+            try:
+                package_path = _ensure_output_path(resolve_project_path(job["package_path"]))
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
     if not package_path.exists():
         raise HTTPException(status_code=404, detail="note package not found")
     data = json.loads(package_path.read_text(encoding="utf-8"))

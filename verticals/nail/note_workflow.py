@@ -3,6 +3,7 @@ NailNoteWorkflow - 小红书美甲图文笔记生产工作流
 顶层编排入口
 """
 from datetime import datetime
+import re
 import time
 
 from .note_workflow_schemas import (
@@ -30,6 +31,12 @@ def _safe_isoformat(value) -> str:
     if isinstance(formatted, str):
         return formatted
     return str(formatted)
+
+
+def _sanitize_note_fragment(value: str, default: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "_", value or "")
+    cleaned = cleaned.strip("_")
+    return cleaned or default
 
 
 class NailNoteWorkflow:
@@ -87,7 +94,11 @@ class NailNoteWorkflow:
 
         # 0. 创建 package 基本结构
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        note_id = f"nail_{timestamp}_{style_id.replace('/', '_')}"
+        style_fragment = _sanitize_note_fragment(style_id.replace("/", "_"), "default")
+        request_id = _sanitize_note_fragment(str(getattr(user_input, "request_id", "") or ""), "")
+        note_id = f"nail_{timestamp}_{style_fragment}"
+        if request_id:
+            note_id = f"{note_id}_{request_id}"
         output_dir = f"output/{note_id}"
         
         # 初始化 VisualDNA（空，后续步骤填充）

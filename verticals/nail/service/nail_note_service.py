@@ -73,7 +73,7 @@ def create_nail_note(request: NailNoteCreateRequest, request_id: Optional[str] =
 
     workflow = NailNoteWorkflow()
     try:
-        package = workflow.generate_note(request.to_user_input())
+        package = workflow.generate_note(request.to_user_input(request_id=request_id))
         status = _package_status(package)
         update_job(
             request_id,

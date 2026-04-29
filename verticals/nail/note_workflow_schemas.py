@@ -155,6 +155,7 @@ class NailNoteUserInput:
         aspect: str = "3:4",
         direction: str = "balanced",
         max_workers: int = 1,
+        request_id: Optional[str] = None,
         # 兼容原有字段
         color_preferences: Optional[List[str]] = None,
         avoid_elements: Optional[List[str]] = None,
@@ -180,6 +181,7 @@ class NailNoteUserInput:
         self.aspect = aspect
         self.direction = direction
         self.max_workers = max_workers
+        self.request_id = request_id
         self.color_preferences = color_preferences or []
         self.avoid_elements = avoid_elements or []
         self.audience = audience

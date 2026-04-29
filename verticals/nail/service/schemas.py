@@ -1,10 +1,11 @@
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Optional, Literal
 
 try:
-    from pydantic import BaseModel, ConfigDict, Field
+    from pydantic import BaseModel, ConfigDict, Field, validator
     PYDANTIC_V2 = True
 except ImportError:
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel, Field, validator
     ConfigDict = dict
     PYDANTIC_V2 = False
 
@@ -27,20 +28,31 @@ class NailNoteCreateRequest(_Model):
     generate_images: bool = True
     generate_copy: bool = True
     generate_tags: bool = True
-    quality: str = "draft"
-    aspect: str = "3:4"
-    direction: str = "balanced"
+    quality: Literal["draft", "final", "premium"] = "draft"
+    aspect: Literal["1:1", "3:4", "4:3", "16:9", "9:16"] = "3:4"
+    direction: Literal["conservative", "balanced", "bold"] = "balanced"
     reference_image_path: Optional[str] = None
     case_id: Optional[str] = None
-    max_workers: int = 1
+    max_workers: int = Field(default=1, ge=1, le=2)
 
     def as_dict(self) -> Dict[str, Any]:
         if PYDANTIC_V2:
             return self.model_dump()
         return self.dict()
 
-    def to_user_input(self) -> NailNoteUserInput:
-        return NailNoteUserInput(**self.as_dict())
+    def to_user_input(self, request_id: Optional[str] = None) -> NailNoteUserInput:
+        payload = self.as_dict()
+        if request_id:
+            payload["request_id"] = request_id
+        return NailNoteUserInput(**payload)
+
+    @validator("style_id")
+    def validate_style_id(cls, value: Optional[str]) -> Optional[str]:
+        if value in (None, ""):
+            return value
+        if not re.fullmatch(r"[A-Za-z0-9_/-]{1,64}", value):
+            raise ValueError("style_id must match [A-Za-z0-9_/-]{1,64}")
+        return value
 
 
 class NailNotePageResponse(_Model):

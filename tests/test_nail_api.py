@@ -2,7 +2,9 @@ import json
 import shutil
 import time
 import unittest
+from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -71,3 +73,101 @@ class NailFastAPITests(unittest.TestCase):
         package_data = package_response.json()
         self.assertEqual(package_data["note_id"], note_id)
         self.assertEqual(package_data["package_path"], package_path)
+
+    def test_post_same_second_jobs_produce_unique_note_ids_and_output_dirs(self):
+        fixed_now = datetime(2026, 4, 29, 17, 21, 24)
+
+        class FixedDateTime(object):
+            @classmethod
+            def now(cls):
+                return fixed_now
+
+        payload = {
+            "brief": "夏日蓝色猫眼短甲",
+            "style_id": "default",
+            "generate_images": False,
+            "generate_copy": True,
+            "generate_tags": True,
+        }
+
+        with patch("verticals.nail.note_workflow.datetime", FixedDateTime):
+            first = self.client.post("/api/nail/notes", json=payload)
+            second = self.client.post("/api/nail/notes", json=payload)
+            self.assertEqual(first.status_code, 202)
+            self.assertEqual(second.status_code, 202)
+
+            first_job = self._wait_for_job(first.json()["job_id"])
+            second_job = self._wait_for_job(second.json()["job_id"])
+
+        self.assertEqual(first_job["status"], "succeeded")
+        self.assertEqual(second_job["status"], "succeeded")
+        self.assertNotEqual(first_job["note_id"], second_job["note_id"])
+        self.assertNotEqual(first_job["output_dir"], second_job["output_dir"])
+        self.assertTrue(first_job["note_id"].endswith(first.json()["job_id"]))
+        self.assertTrue(second_job["note_id"].endswith(second.json()["job_id"]))
+
+        first_package = resolve_project_path(first_job["package_path"])
+        second_package = resolve_project_path(second_job["package_path"])
+        self.assertTrue(first_package.exists())
+        self.assertTrue(second_package.exists())
+        self.assertNotEqual(first_package, second_package)
+        self._cleanup_dirs.append(resolve_project_path(first_job["output_dir"]))
+        self._cleanup_dirs.append(resolve_project_path(second_job["output_dir"]))
+
+    def test_package_endpoint_rejects_invalid_note_id(self):
+        response = self.client.get("/api/nail/notes/..%2F..%2Fetc%2Fpasswd/package")
+        self.assertIn(response.status_code, (400, 404))
+
+        response = self.client.get("/api/nail/notes/nail_bad$id/package")
+        self.assertEqual(response.status_code, 400)
+
+    def test_request_validation_rejects_invalid_bounds(self):
+        response = self.client.post(
+            "/api/nail/notes",
+            json={"brief": "test", "generate_images": False, "max_workers": 3},
+        )
+        self.assertEqual(response.status_code, 422)
+
+        response = self.client.post(
+            "/api/nail/notes",
+            json={"brief": "test", "generate_images": False, "quality": "ultra"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+        response = self.client.post(
+            "/api/nail/notes",
+            json={"brief": "test", "generate_images": False, "aspect": "2:5"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+        response = self.client.post(
+            "/api/nail/notes",
+            json={"brief": "test", "generate_images": False, "style_id": "../bad"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_job_store_concurrent_updates_are_safe(self):
+        import threading
+
+        job_store.create_job("job_concurrent", payload={"brief": "x"})
+
+        failures = []
+
+        def worker(index):
+            try:
+                job_store.update_job("job_concurrent", status="running", note_id="note_{index}".format(index=index))
+                job = job_store.get_job("job_concurrent")
+                self.assertIsNotNone(job)
+            except Exception as exc:
+                failures.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(index,)) for index in range(10)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(failures, [])
+        job = job_store.get_job("job_concurrent")
+        self.assertIsNotNone(job)
+        self.assertEqual(job["job_id"], "job_concurrent")
