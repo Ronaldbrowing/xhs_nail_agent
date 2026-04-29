@@ -100,6 +100,7 @@
   const maxWorkersField = document.getElementById("max_workers");
   const exampleButton = document.getElementById("example-button");
   const submitButton = document.getElementById("submit-button");
+  const progressPanel = document.getElementById("progress-panel");
   const statusText = document.getElementById("status-text");
   const progressDetail = document.getElementById("progress-detail");
   const statusBadge = document.getElementById("status-badge");
@@ -117,6 +118,20 @@
   const STORAGE_KEY = "nail_studio_last_job";
   let currentJobContext = null;
   let continueQueryPromise = null;
+  let currentStatusKey = "idle";
+
+  function ensureResumeElements() {
+    if (!resumePanel || !resumeText || !continueButton || !clearJobButton) {
+      console.error("resume-panel element is missing", {
+        hasResumePanel: Boolean(resumePanel),
+        hasResumeText: Boolean(resumeText),
+        hasContinueButton: Boolean(continueButton),
+        hasClearJobButton: Boolean(clearJobButton),
+      });
+      return false;
+    }
+    return true;
+  }
 
   function populateSelect(selectElement, options) {
     selectElement.innerHTML = "";
@@ -240,20 +255,40 @@
   }
 
   function showResumePanel(message) {
+    if (!ensureResumeElements()) {
+      return;
+    }
     resumeText.textContent = message;
     resumePanel.hidden = false;
+    resumePanel.style.display = "";
+    resumePanel.removeAttribute("hidden");
+    progressPanel.hidden = false;
   }
 
   function hideResumePanel() {
+    if (!resumePanel) {
+      console.error("resume-panel element is missing", {
+        hasResumePanel: Boolean(resumePanel),
+      });
+      return;
+    }
     resumePanel.hidden = true;
+    resumePanel.style.display = "none";
+    resumePanel.setAttribute("hidden", "");
+    if (currentStatusKey === "idle") {
+      progressPanel.hidden = true;
+    }
   }
 
   function applyStatus(stateKey, detailText) {
     const state = APP_CONFIG.jobStatusMap[stateKey] || APP_CONFIG.jobStatusMap.idle;
+    currentStatusKey = stateKey;
     statusText.textContent = state.title;
     progressDetail.textContent = detailText || state.detail;
     statusBadge.textContent = state.badge;
     statusBadge.className = "status-badge status-" + stateKey;
+    progressPanel.hidden = stateKey === "idle" && resumePanel.hidden;
+    progressPanel.classList.toggle("is-busy", stateKey === "queued" || stateKey === "running");
   }
 
   function clearResults() {
@@ -696,4 +731,18 @@
     showResumePanel("发现上次任务，是否继续查看？");
     resultMeta.textContent = "如果你上次的任务已经跑完，可以直接继续查询并恢复内容预览。";
   }
+
+  window.__nailStudioDebug = function () {
+    return {
+      hasResumePanel: Boolean(document.querySelector("#resume-panel")),
+      resumePanelHidden: document.querySelector("#resume-panel")
+        ? document.querySelector("#resume-panel").hidden
+        : null,
+      resumeText: document.querySelector("#resume-text")
+        ? document.querySelector("#resume-text").textContent
+        : null,
+      hasContinueButton: Boolean(document.querySelector("#continue-button")),
+      hasClearJobButton: Boolean(document.querySelector("#clear-job-button")),
+    };
+  };
 })();

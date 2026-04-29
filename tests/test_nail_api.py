@@ -63,10 +63,17 @@ class NailFastAPITests(unittest.TestCase):
         js_response = self.client.get("/web/app.js")
         self.assertEqual(js_response.status_code, 200)
         self.assertIn("javascript", js_response.headers.get("content-type", ""))
+        js_body = js_response.text
+        self.assertIn('resumePanel.removeAttribute("hidden")', js_body)
+        self.assertIn('resumePanel.style.display = ""', js_body)
+        self.assertIn('console.error("resume-panel element is missing"', js_body)
 
         css_response = self.client.get("/web/style.css")
         self.assertEqual(css_response.status_code, 200)
         self.assertIn("text/css", css_response.headers.get("content-type", ""))
+        css_body = css_response.text
+        self.assertIn(".resume-panel-inline", css_body)
+        self.assertIn("background: #fff8f6;", css_body)
 
     def test_post_generate_images_false_returns_job_and_package(self):
         response = self.client.post(

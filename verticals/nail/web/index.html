@@ -32,6 +32,14 @@
           </div>
 
           <form id="note-form" class="composer-form">
+            <div id="resume-panel" class="resume-panel resume-panel-inline" hidden>
+              <p id="resume-text" class="resume-text">发现上次任务，是否继续查看？</p>
+              <div class="resume-actions">
+                <button id="continue-button" type="button" class="secondary-button">继续查询</button>
+                <button id="clear-job-button" type="button" class="ghost-button">清除任务</button>
+              </div>
+            </div>
+
             <label class="field field-wide">
               <span>内容需求</span>
               <textarea
@@ -115,19 +123,17 @@
             <span id="status-badge" class="status-badge status-idle">待开始</span>
           </div>
 
-          <div class="progress-panel">
+          <div id="progress-panel" class="progress-panel" hidden>
+            <div class="progress-loader" aria-hidden="true">
+              <span class="progress-loader-dot"></span>
+              <span class="progress-loader-dot"></span>
+              <span class="progress-loader-dot"></span>
+            </div>
             <p id="status-text" class="progress-title">待开始</p>
             <p id="progress-detail" class="progress-detail">在左侧输入内容需求，点击「生成内容预览」即可开始。</p>
-            <div id="resume-panel" class="resume-panel" hidden>
-              <p id="resume-text" class="resume-text">发现上次任务，是否继续查看？</p>
-              <div class="resume-actions">
-                <button id="continue-button" type="button" class="secondary-button">继续查询</button>
-                <button id="clear-job-button" type="button" class="ghost-button">清除任务</button>
-              </div>
-            </div>
           </div>
 
-          <details class="dev-panel">
+          <details id="dev-panel" class="dev-panel">
             <summary>开发信息</summary>
             <pre id="job-meta" class="code-block">任务开始后，这里会显示任务编号和技术信息。</pre>
           </details>
