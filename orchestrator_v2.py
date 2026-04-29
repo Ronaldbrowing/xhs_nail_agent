@@ -616,6 +616,7 @@ def run(
     aspect: str = None,
     quality: str = None,
     case_id: str = None,
+    reference_image_path: str = None,
     precompiled_brief: bool = False,
     dna_summary: str = None,
 ) -> dict:
@@ -712,7 +713,17 @@ def run(
     ref_src_type = None
     ref_src_value = None
     ref_src_task = None
-    if use_reference and case_id:
+    if use_reference and reference_image_path:
+        reference_image = reference_image_path
+        ref_path = resolve_project_path(reference_image_path)
+        ref_src_type = "local_path"
+        ref_src_value = to_project_relative(reference_image_path)
+        ref_src_task = final_task
+        if ref_path.exists():
+            log("案例库", "📚", f"使用本地参考图: {ref_path.name}")
+        else:
+            log("案例库", "📚", f"⚠️ 本地参考图不存在: {reference_image_path}，标记为无效参考图")
+    elif use_reference and case_id:
         # Try get_case_image_path first
         reference_image = get_case_image_path(case_id, final_task)
         if not reference_image:

@@ -1,35 +1,84 @@
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Any
+from typing import Any, Dict, List, Optional
 
-# Re-export NailNoteWorkflow types for convenient importing from verticals.nail.schemas
 from .note_workflow_schemas import (
-    NailNoteUserInput,
     NailNotePackage,
+    NailNoteUserInput,
     NoteGoal,
+    NotePageSpec,
     PageRole,
     VisualDNA,
-    NotePageSpec,
 )
 
-@dataclass
-class UserInput:
-    brief: str
-    style_id: Optional[str] = None
-    audience: Optional[str] = None
-    season: Optional[str] = None
-    skin_tone: Optional[str] = None
-    nail_length: Optional[str] = None
-    nail_shape: Optional[str] = None
-    color_preferences: List[str] = field(default_factory=list)
-    avoid_elements: List[str] = field(default_factory=list)
-    reference_image_path: Optional[str] = None
-    reference_usage: Optional[str] = None
-    reference_must_keep: List[str] = field(default_factory=list)
-    reference_can_change: List[str] = field(default_factory=list)
-    allow_text_on_image: bool = False
-    need_preview: bool = True
-    note_goal: Optional[str] = None
-    scene_hint: Optional[str] = None
+
+class UserInput(NailNoteUserInput):
+    """
+    Backward-compatible user input surface.
+
+    Historically callers imported UserInput from verticals.nail.schemas.
+    Keep that import working while exposing the newer NailNoteWorkflow fields.
+    """
+
+    def __init__(
+        self,
+        brief: str,
+        style_id: Optional[str] = None,
+        audience: Optional[str] = None,
+        season: Optional[str] = None,
+        skin_tone: Optional[str] = None,
+        nail_length: Optional[str] = None,
+        nail_shape: Optional[str] = None,
+        color_preferences: Optional[List[str]] = None,
+        avoid_elements: Optional[List[str]] = None,
+        reference_image_path: Optional[str] = None,
+        reference_usage: Optional[str] = None,
+        reference_must_keep: Optional[List[str]] = None,
+        reference_can_change: Optional[List[str]] = None,
+        allow_text_on_image: bool = False,
+        need_preview: bool = True,
+        note_goal: str = "seed",
+        scene_hint: Optional[str] = None,
+        note_template: Optional[str] = None,
+        page_count: int = 6,
+        case_id: Optional[str] = None,
+        generate_images: bool = True,
+        generate_copy: bool = True,
+        generate_tags: bool = True,
+        quality: str = "final",
+        aspect: str = "3:4",
+        direction: str = "balanced",
+        **kwargs,
+    ):
+        super().__init__(
+            brief=brief,
+            style_id=style_id,
+            skin_tone=skin_tone,
+            nail_length=nail_length,
+            nail_shape=nail_shape,
+            note_goal=note_goal,
+            note_template=note_template,
+            page_count=page_count,
+            allow_text_on_image=allow_text_on_image,
+            reference_image_path=reference_image_path,
+            case_id=case_id,
+            generate_images=generate_images,
+            generate_copy=generate_copy,
+            generate_tags=generate_tags,
+            quality=quality,
+            aspect=aspect,
+            direction=direction,
+            color_preferences=color_preferences,
+            avoid_elements=avoid_elements,
+            audience=audience,
+            season=season,
+            **kwargs,
+        )
+        self.reference_usage = reference_usage
+        self.reference_must_keep = reference_must_keep or []
+        self.reference_can_change = reference_can_change or []
+        self.need_preview = need_preview
+        self.scene_hint = scene_hint
+
 
 @dataclass
 class ReferenceDNA:
@@ -47,6 +96,7 @@ class ReferenceDNA:
     title_area_hint: str = ""
     main_visual_identity: List[str] = field(default_factory=list)
 
+
 @dataclass
 class NailStyle:
     style_id: str
@@ -62,6 +112,7 @@ class NailStyle:
     image_prompt: Dict[str, Any]
     reference_policy: Dict[str, Any]
 
+
 @dataclass
 class PromptBundle:
     final_brief: str
@@ -71,6 +122,7 @@ class PromptBundle:
     body_candidates: List[str]
     tag_candidates: List[List[str]]
     debug_info: Dict[str, Any] = field(default_factory=dict)
+
 
 @dataclass
 class PreviewPayload:

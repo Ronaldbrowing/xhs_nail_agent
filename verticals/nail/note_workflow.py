@@ -274,21 +274,7 @@ class NailNoteWorkflow:
             print("[图片生成] ⏭️ 已跳过（generate_images=False）")
         print()
 
-        # 10. QA 检查（图片生成之后）
-        print("[QA检查] 🔄 运行质量检查...")
-        try:
-            qa_result = note_qa_module.qa_note_package(package, generate_images=user_input.generate_images)
-            print(f"[QA检查] {'✅ PASS' if qa_result['passed'] else '⚠️ WARN'} score={qa_result['score']}")
-            if qa_result['issues']:
-                for issue in qa_result['issues']:
-                    print(f"   - {issue}")
-            package.diagnostics["qa_score"] = qa_result['score']
-        except Exception as e:
-            print(f"[QA检查] ⚠️ 检查失败: {e}")
-            package.diagnostics["qa_error"] = str(e)
-        print()
-
-        # 11. 最终结果计算
+        # 10. 最终结果计算
         # 检查封面页状态
         cover_page = package.pages[0] if package.pages else None
         cover_failed = cover_page and cover_page.status == "failed"
@@ -330,7 +316,7 @@ class NailNoteWorkflow:
             print(f"[结果] ⚠️ {inner_pages_failed} 个内页生成失败")
         print()
 
-        # 12. 保存 note_package.json 和 archive.json（最终计算之后）
+        # 11. 先保存一次 package，确保后续 QA 能检查 package_path
         print("[发布包] 🔄 保存发布包...")
         try:
             ok = package_writer.write_note_package(package, output_dir)
@@ -342,6 +328,26 @@ class NailNoteWorkflow:
         except Exception as e:
             print(f"[发布包] ⚠️ 保存异常: {e}")
             package.diagnostics["package_writer_error"] = str(e)
+        print()
+
+        # 12. QA 检查（保存之后；分数写回 diagnostics 后再落盘一次）
+        print("[QA检查] 🔄 运行质量检查...")
+        try:
+            qa_result = note_qa_module.qa_note_package(package, generate_images=user_input.generate_images)
+            print(f"[QA检查] {'✅ PASS' if qa_result['passed'] else '⚠️ WARN'} score={qa_result['score']}")
+            if qa_result['issues']:
+                for issue in qa_result['issues']:
+                    print(f"   - {issue}")
+            package.diagnostics["qa_score"] = qa_result['score']
+            ok = package_writer.write_note_package(package, output_dir)
+            if not ok:
+                print("[QA检查] ⚠️ QA 结果回写失败")
+        except Exception as e:
+            print(f"[QA检查] ⚠️ 检查失败: {e}")
+            package.diagnostics["qa_error"] = str(e)
+            ok = package_writer.write_note_package(package, output_dir)
+            if not ok:
+                print("[QA检查] ⚠️ QA 异常信息回写失败")
         print()
 
         print("=" * 70)

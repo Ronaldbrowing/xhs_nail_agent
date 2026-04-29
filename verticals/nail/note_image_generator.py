@@ -88,6 +88,7 @@ def _generate_single_page(
             aspect=aspect,
             quality=quality,
             precompiled_brief=True,
+            case_id=case_id if use_reference else None,
             reference_image_path=reference_image_path if use_reference else None,
         )
 

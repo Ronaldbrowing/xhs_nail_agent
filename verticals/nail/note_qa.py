@@ -3,6 +3,25 @@
 """
 from typing import Dict
 from .note_workflow_schemas import NailNotePackage
+from project_paths import resolve_project_path
+
+
+def _check_generated_page_image(page, page_label: str, issues: list, score: float) -> float:
+    """Validate image_path for any generated page."""
+    if not page.image_path:
+        issues.append(f"{page_label} status=generated 但无 image_path")
+        return score - 1.0
+
+    try:
+        image_path = resolve_project_path(page.image_path)
+    except Exception:
+        image_path = None
+
+    if image_path is None or not image_path.exists():
+        issues.append(f"{page_label} image_path 不存在: {page.image_path}")
+        return score - 1.0
+
+    return score
 
 
 def qa_note_package(package: NailNotePackage, generate_images: bool = True) -> Dict:
@@ -98,31 +117,18 @@ def qa_note_package(package: NailNotePackage, generate_images: bool = True) -> D
             score -= 1.0
         # 封面页状态检查
         if cover_page.status == "generated":
-            if not cover_page.image_path:
-                issues.append("封面页 status=generated 但无 image_path")
-                score -= 2.0
-            else:
-                # 检查图片路径是否存在
-                try:
-                    from pathlib import Path
-                    from project_paths import PROJECT_ROOT
-                    img_p = Path(cover_page.image_path)
-                    if not img_p.is_absolute():
-                        img_p = PROJECT_ROOT / img_p
-                    if not img_p.exists():
-                        issues.append(f"封面图片路径不存在: {cover_page.image_path}")
-                        score -= 2.0
-                except Exception:
-                    pass
+            prev_score = score
+            score = _check_generated_page_image(cover_page, "封面页", issues, score)
+            if score < prev_score:
+                score -= 1.0
         elif cover_page.status == "failed":
             issues.append("封面页生成失败")
             score -= 2.0
 
         # 检查内页图片路径
         for i, page in enumerate(package.pages[1:], start=2):
-            if page.status == "generated" and not page.image_path:
-                issues.append(f"第{i}页 status=generated 但无 image_path")
-                score -= 1.0
+            if page.status == "generated":
+                score = _check_generated_page_image(page, f"第{i}页", issues, score)
 
     # 9. package 保存检查（generate_images=True 时才检查）
     if generate_images:
@@ -131,11 +137,7 @@ def qa_note_package(package: NailNotePackage, generate_images: bool = True) -> D
             score -= 1.0
         else:
             try:
-                from pathlib import Path
-                from project_paths import PROJECT_ROOT
-                pkg_p = Path(package.package_path)
-                if not pkg_p.is_absolute():
-                    pkg_p = PROJECT_ROOT / pkg_p
+                pkg_p = resolve_project_path(package.package_path)
                 if not pkg_p.exists():
                     issues.append(f"note_package.json 不存在: {package.package_path}")
                     score -= 1.0
