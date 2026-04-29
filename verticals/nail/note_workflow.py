@@ -277,7 +277,7 @@ class NailNoteWorkflow:
         # 10. QA 检查（图片生成之后）
         print("[QA检查] 🔄 运行质量检查...")
         try:
-            qa_result = note_qa_module.qa_note_package(package)
+            qa_result = note_qa_module.qa_note_package(package, generate_images=user_input.generate_images)
             print(f"[QA检查] {'✅ PASS' if qa_result['passed'] else '⚠️ WARN'} score={qa_result['score']}")
             if qa_result['issues']:
                 for issue in qa_result['issues']:
@@ -306,15 +306,12 @@ class NailNoteWorkflow:
                 and len(package.tags) >= 15
                 and len(package.comment_hooks) >= 3
                 and bool(package.body)
-                and package.package_path is not None
                 and cover_page is not None
                 and cover_page.status == "generated"
                 and cover_page.image_path is not None
             )
-            # 封面失败时 success=False，内页失败时 partial_failure=True
-            if cover_failed:
-                package.partial_failure = True
-            elif inner_pages_failed > 0:
+            # 封面失败时 partial_failure=True，内页失败时 partial_failure=True
+            if cover_failed or inner_pages_failed > 0:
                 package.partial_failure = True
         else:
             # generate_images=False：不要求图片
@@ -324,7 +321,6 @@ class NailNoteWorkflow:
                 and len(package.tags) >= 15
                 and len(package.comment_hooks) >= 3
                 and bool(package.body)
-                and package.package_path is not None
             )
 
         print(f"[结果] success={package.success} partial_failure={package.partial_failure}")
