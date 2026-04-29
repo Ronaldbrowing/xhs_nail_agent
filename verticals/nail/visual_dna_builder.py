@@ -1,26 +1,16 @@
 """
 视觉DNA构建器 - 从用户输入、参考图、案例库构建 VisualDNA
 """
-import os
 import re
 from typing import Optional
 from .note_workflow_schemas import VisualDNA
+from src.llm_provider import get_text_client, get_text_model
 
 
-def _get_openai_client():
-    """获取 OpenAI client"""
+def _get_llm_client():
+    """获取 OpenAI-compatible client"""
     try:
-        from openai import OpenAI
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            # 尝试从配置文件读取
-            try:
-                from gpt_image2_generator import get_api_key
-                api_key = get_api_key()
-            except ImportError:
-                pass
-        if api_key:
-            return OpenAI(api_key=api_key)
+        return get_text_client()
     except Exception:
         pass
     return None
@@ -122,7 +112,7 @@ def _get_default_negative(skin_tone: str = None, nail_shape: str = None) -> list
 def _build_dna_from_llm(brief: str, skin_tone: str = None, nail_length: str = None,
                         nail_shape: str = None, style_id: str = None) -> VisualDNA:
     """用 LLM 从 brief 推断 VisualDNA"""
-    client = _get_openai_client()
+    client = _get_llm_client()
     
     prompt = f"""根据以下美甲需求，提取视觉DNA信息。
 
@@ -149,7 +139,7 @@ def _build_dna_from_llm(brief: str, skin_tone: str = None, nail_length: str = No
     try:
         if client:
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_text_model("vision_small"),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=500,

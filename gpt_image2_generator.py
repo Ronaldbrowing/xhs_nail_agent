@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 GPT-Image-2 图片生成器
-支持 apimart.ai (异步) 和 new.apipudding.com (同步) 两种模式
+支持 OpenAI-compatible provider 的图片生成流程
 使用 curl subprocess 避免 hermes 环境 http.client 连接超时问题
 """
 
@@ -14,8 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from project_paths import OUTPUT_DIR, to_project_relative
-
-API_BASE = os.getenv("APIMART_API_BASE", "https://new.apipudding.com/v1")
+from src.llm_provider import get_image_settings
 
 
 def _curl_post(url: str, api_key: str, data: dict, timeout: int = 120) -> dict:
@@ -81,19 +80,29 @@ def _get_bytes_via_curl(url: str, headers: dict = None, timeout: int = 60) -> by
 
 
 def require_api_key(api_key: str = None) -> str:
-    """Return the apimart/OpenAI-compatible API key or fail with a clear message."""
-    resolved = api_key or os.environ.get("OPENAI_API_KEY")
+    """Return the active provider API key or fail with a clear message."""
+    resolved = api_key or get_image_settings()["api_key"]
     if not resolved:
         raise RuntimeError(
-            "Missing OPENAI_API_KEY. Set your apimart.ai GPT-Image-2 key before generating images."
+            "Missing image provider API key. Configure the active LLMProvider first."
         )
     return resolved
+
+
+def get_api_base() -> str:
+    settings = get_image_settings()
+    return settings["api_base"]
+
+
+def get_image_model() -> str:
+    settings = get_image_settings()
+    return settings["model"]
 
 
 def _convert_size(size: str) -> str:
     """
     将比例格式转换为像素尺寸格式
-    new.apipudding.com 要求 WIDTHxHEIGHT 格式如 '1024x1024'
+    OpenAI-compatible images endpoint 常见使用 WIDTHxHEIGHT 格式如 '1024x1024'
     比例格式: '1:1', '16:9', '9:16', '3:4' 等
     """
     # 如果已经是像素格式，直接返回
@@ -129,16 +138,11 @@ def submit_task(prompt: str, size: str = "1:1", api_key: str = None):
     """
     api_key = require_api_key(api_key)
     
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    
     # 转换尺寸格式
     pixel_size = _convert_size(size)
     
     data = {
-        "model": "gpt-image-2",
+        "model": get_image_model(),
         "prompt": prompt,
         "n": 1,
         "size": pixel_size
@@ -148,9 +152,9 @@ def submit_task(prompt: str, size: str = "1:1", api_key: str = None):
     print(f"   📝 Prompt: {prompt[:60]}...")
     print(f"   📐 Size: {size} → {pixel_size}")
     
-    result = _post_json(API_BASE, "/images/generations", api_key, data, timeout=120)
+    result = _post_json(get_api_base(), "/images/generations", api_key, data, timeout=120)
     
-    # 同步模式（new.apipudding.com）：直接返回 b64_json 或 url
+    # 兼容同步返回：直接返回 b64_json 或 url
     if "data" in result and isinstance(result["data"], list) and len(result["data"]) > 0:
         item = result["data"][0]
         if "task_id" in item:
@@ -159,7 +163,7 @@ def submit_task(prompt: str, size: str = "1:1", api_key: str = None):
             print(f"   ✅ 任务已提交: {task_id}")
             return {"success": True, "task_id": task_id, "mode": "async"}
         elif "b64_json" in item or "url" in item:
-            # 同步模式（new.apipudding.com）
+            # 同步模式
             print(f"   ✅ 同步返回，直接生成完成")
             return {"success": True, "data": result, "mode": "sync"}
     
@@ -183,9 +187,7 @@ def query_task(task_id: str, api_key: str = None):
     """
     api_key = require_api_key(api_key)
     
-    headers = {"Authorization": f"Bearer {api_key}"}
-    
-    result = _post_json(API_BASE, f"/tasks/{task_id}", api_key, {}, timeout=30)
+    result = _post_json(get_api_base(), f"/tasks/{task_id}", api_key, {}, timeout=30)
     return result
 
 

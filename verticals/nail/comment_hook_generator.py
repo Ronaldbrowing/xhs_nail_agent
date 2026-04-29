@@ -1,23 +1,14 @@
 """
 评论钩子生成器 - 生成3-5个引发评论的钩子
 """
-import os
 from typing import List
 from .note_workflow_schemas import VisualDNA
+from src.llm_provider import get_text_client, get_text_model
 
 
-def _get_openai_client():
+def _get_llm_client():
     try:
-        from openai import OpenAI
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            try:
-                from gpt_image2_generator import get_api_key
-                api_key = get_api_key()
-            except ImportError:
-                pass
-        if api_key:
-            return OpenAI(api_key=api_key)
+        return get_text_client()
     except Exception:
         pass
     return None
@@ -42,7 +33,7 @@ def generate_comment_hooks(user_input, visual_dna: VisualDNA, count: int = 4) ->
     main_color = visual_dna.main_color or '清透色'
     finish = visual_dna.finish or ''
 
-    client = _get_openai_client()
+    client = _get_llm_client()
 
     if client:
         try:
@@ -66,7 +57,7 @@ def generate_comment_hooks(user_input, visual_dna: VisualDNA, count: int = 4) ->
 格式：钩子1 | 钩子2 | 钩子3 | ..."""
 
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_text_model("hook_small"),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.8,
                 max_tokens=300,

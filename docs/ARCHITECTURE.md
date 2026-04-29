@@ -18,6 +18,34 @@
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
+### Provider 配置层
+
+当前实现通过统一的 `LLMProvider` 配置层管理所有 OpenAI-compatible provider：
+
+```text
+src/llm_provider.py
+```
+
+它负责：
+
+- 解析当前活跃 provider，例如 `openai` 或 `apimart`
+- 统一加载服务端 API key 与 base URL
+- 生成 OpenAI-compatible SDK client
+- 用业务别名映射真实模型名
+
+当前业务别名包括：
+
+```text
+planner_small
+copy_small
+tag_small
+hook_small
+vision_small
+image_default
+```
+
+这意味着上层工作流只依赖“能力别名”，不直接依赖某个厂商模型名。未来 Web 或手机 App 也应只调用后端工作流接口，由后端统一决定 provider 和模型配置。
+
 ---
 
 ## 完整业务流程（orchestrator_v2.py）
@@ -191,7 +219,7 @@
 │  ─────────────────────────────────────────────────────────────  │
 │  POST /v1/images/generations                                    │
 │  payload: {                                                     │
-│    model: "gpt-image-2",                                        │
+│    model: image_default alias 解析后的真实模型,                  │
 │    prompt: final_prompt,                                        │
 │    image_urls: [image_url],  ← 参考图 URL                        │
 │    size: aspect,                                                │

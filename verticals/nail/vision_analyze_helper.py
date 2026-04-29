@@ -1,18 +1,15 @@
 """
 视觉分析辅助 - 从参考图提取 VisualDNA
 """
-import os
 from typing import Optional
 from .note_workflow_schemas import VisualDNA
+from src.llm_provider import get_text_client, get_text_model
 
 
-def _get_openai_client():
-    """获取 OpenAI client"""
+def _get_llm_client():
+    """获取 OpenAI-compatible client"""
     try:
-        from openai import OpenAI
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if api_key:
-            return OpenAI(api_key=api_key)
+        return get_text_client()
     except Exception:
         pass
     return None
@@ -28,7 +25,7 @@ def analyze_image_for_dna(image_path: str) -> Optional[VisualDNA]:
     Returns:
         VisualDNA 对象，或 None（分析失败时）
     """
-    client = _get_openai_client()
+    client = _get_llm_client()
     if not client:
         return None
     
@@ -63,7 +60,7 @@ def analyze_image_for_dna(image_path: str) -> Optional[VisualDNA]:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=get_text_model("vision_small"),
             messages=[
                 {
                     "role": "user",

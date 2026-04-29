@@ -3,32 +3,29 @@
 """
 from typing import List, Tuple, Optional
 from .note_workflow_schemas import NotePageSpec, PageRole, VisualDNA
+from src.llm_provider import get_text_client, get_text_model
 
 
 def _generate_visual_brief_llm(role: PageRole, brief: str, visual_dna: VisualDNA) -> str:
     """用 LLM 生成该页的 visual_brief"""
     try:
-        import os
-        from openai import OpenAI
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if api_key:
-            client = OpenAI(api_key=api_key)
-            role_descriptions = {
-                PageRole.cover: "封面主视觉 - 抓眼球，展示最终效果全貌",
-                PageRole.detail_closeup: "细节特写 - 展示质感、光泽、工艺",
-                PageRole.skin_tone_fit: "肤色适配 - 展示不同肤色的效果",
-                PageRole.style_breakdown: "款式拆解 - 分解颜色、甲型、质感",
-                PageRole.scene_mood: "场景氛围 - 生活方式代入",
-                PageRole.avoid_mistakes: "避雷提示 - 常见错误和注意事项",
-                PageRole.save_summary: "收藏总结 - 关键信息提炼",
-                PageRole.materials: "素材工具 - 所需材料和工具",
-                PageRole.step_by_step: "步骤教程 - 制作过程分解",
-                PageRole.comparison_grid: "对比网格 - 多款对比",
-                PageRole.collection_grid: "收藏网格 - 合集展示",
-            }
-            role_desc = role_descriptions.get(role, str(role.value))
-            
-            prompt = f"""根据以下美甲需求，为「第{role_desc}」这一页生成视觉简报（visual_brief）。
+        client = get_text_client()
+        role_descriptions = {
+            PageRole.cover: "封面主视觉 - 抓眼球，展示最终效果全貌",
+            PageRole.detail_closeup: "细节特写 - 展示质感、光泽、工艺",
+            PageRole.skin_tone_fit: "肤色适配 - 展示不同肤色的效果",
+            PageRole.style_breakdown: "款式拆解 - 分解颜色、甲型、质感",
+            PageRole.scene_mood: "场景氛围 - 生活方式代入",
+            PageRole.avoid_mistakes: "避雷提示 - 常见错误和注意事项",
+            PageRole.save_summary: "收藏总结 - 关键信息提炼",
+            PageRole.materials: "素材工具 - 所需材料和工具",
+            PageRole.step_by_step: "步骤教程 - 制作过程分解",
+            PageRole.comparison_grid: "对比网格 - 多款对比",
+            PageRole.collection_grid: "收藏网格 - 合集展示",
+        }
+        role_desc = role_descriptions.get(role, str(role.value))
+        
+        prompt = f"""根据以下美甲需求，为「第{role_desc}」这一页生成视觉简报（visual_brief）。
 
 用户需求：{brief}
 指甲长度：{visual_dna.nail_length or '未指定'}
@@ -42,15 +39,15 @@ def _generate_visual_brief_llm(role: PageRole, brief: str, visual_dna: VisualDNA
 
 只返回描述，不要其他文字。"""
 
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=100,
-            )
-            text = response.choices[0].message.content.strip()
-            if text:
-                return text
+        response = client.chat.completions.create(
+            model=get_text_model("planner_small"),
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=100,
+        )
+        text = response.choices[0].message.content.strip()
+        if text:
+            return text
     except Exception:
         pass
     
@@ -124,42 +121,38 @@ def _generate_text_overlay_and_caption_llm(role: PageRole, brief: str, visual_dn
     caption = None
 
     try:
-        import os
-        from openai import OpenAI
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if api_key:
-            client = OpenAI(api_key=api_key)
-            role_text_overlay_descriptions = {
-                PageRole.cover: "封面大标题，如「夏日显白猫眼✨」",
-                PageRole.detail_closeup: "细节标签，如「猫眼光泽绝了」",
-                PageRole.skin_tone_fit: "对比说明，如「黄皮显白攻略」",
-                PageRole.style_breakdown: "要素标签，如「颜色·甲型·质感」",
-                PageRole.scene_mood: "氛围文案，如「海边约会必备」",
-                PageRole.avoid_mistakes: "避雷提示，如「做错毁所有」",
-                PageRole.save_summary: "总结金句，如「收藏！超全美甲攻略」",
-                PageRole.materials: "材料清单标题，如「需要的材料都在这」",
-                PageRole.step_by_step: "步骤引导，如「跟我做！超简单」",
-                PageRole.comparison_grid: "对比说明，如「哪款最适合你」",
-                PageRole.collection_grid: "合集标题，如「私藏6款绝美猫眼」",
-            }
-            role_caption_descriptions = {
-                PageRole.cover: "吸引点击的开头，如「姐妹们！这也太好看了吧」",
-                PageRole.detail_closeup: "强调质感的描述，如「阳光下绝美光泽」",
-                PageRole.skin_tone_fit: "肤色适配说明，如「黄皮亲测显白」",
-                PageRole.style_breakdown: "款式拆解说明，如「三个要点教你选对款式」",
-                PageRole.scene_mood: "场景氛围描述，如「约会/通勤/度假都能hold住」",
-                PageRole.avoid_mistakes: "避雷提醒，如「这几个坑千万别踩」",
-                PageRole.save_summary: "收藏引导，如「建议收藏！超全美甲指南」",
-                PageRole.materials: "材料介绍，如「新手友好！需要的都在这」",
-                PageRole.step_by_step: "教程引导，如「跟着做不出错」",
-                PageRole.comparison_grid: "对比总结，如「测评结果出炉」",
-                PageRole.collection_grid: "合集推荐，如「私藏宝藏款式」",
-            }
+        client = get_text_client()
+        role_text_overlay_descriptions = {
+            PageRole.cover: "封面大标题，如「夏日显白猫眼✨」",
+            PageRole.detail_closeup: "细节标签，如「猫眼光泽绝了」",
+            PageRole.skin_tone_fit: "对比说明，如「黄皮显白攻略」",
+            PageRole.style_breakdown: "要素标签，如「颜色·甲型·质感」",
+            PageRole.scene_mood: "氛围文案，如「海边约会必备」",
+            PageRole.avoid_mistakes: "避雷提示，如「做错毁所有」",
+            PageRole.save_summary: "总结金句，如「收藏！超全美甲攻略」",
+            PageRole.materials: "材料清单标题，如「需要的材料都在这」",
+            PageRole.step_by_step: "步骤引导，如「跟我做！超简单」",
+            PageRole.comparison_grid: "对比说明，如「哪款最适合你」",
+            PageRole.collection_grid: "合集标题，如「私藏6款绝美猫眼」",
+        }
+        role_caption_descriptions = {
+            PageRole.cover: "吸引点击的开头，如「姐妹们！这也太好看了吧」",
+            PageRole.detail_closeup: "强调质感的描述，如「阳光下绝美光泽」",
+            PageRole.skin_tone_fit: "肤色适配说明，如「黄皮亲测显白」",
+            PageRole.style_breakdown: "款式拆解说明，如「三个要点教你选对款式」",
+            PageRole.scene_mood: "场景氛围描述，如「约会/通勤/度假都能hold住」",
+            PageRole.avoid_mistakes: "避雷提醒，如「这几个坑千万别踩」",
+            PageRole.save_summary: "收藏引导，如「建议收藏！超全美甲指南」",
+            PageRole.materials: "材料介绍，如「新手友好！需要的都在这」",
+            PageRole.step_by_step: "教程引导，如「跟着做不出错」",
+            PageRole.comparison_grid: "对比总结，如「测评结果出炉」",
+            PageRole.collection_grid: "合集推荐，如「私藏宝藏款式」",
+        }
 
-            overlay_hint = role_text_overlay_descriptions.get(role, "简短有力的文字")
-            caption_hint = role_caption_descriptions.get(role, "配合图片的简短文案")
+        overlay_hint = role_text_overlay_descriptions.get(role, "简短有力的文字")
+        caption_hint = role_caption_descriptions.get(role, "配合图片的简短文案")
 
-            prompt = f"""根据以下美甲页面信息，生成该页的：
+        prompt = f"""根据以下美甲页面信息，生成该页的：
 1. text_overlay：图片上叠加的文字（简短有力，10字以内，适合小红书风格）
 2. caption：图片配文（配合图片的说明文字，20-50字）
 
@@ -180,19 +173,19 @@ caption: <配文>
 
 只返回这两行，不要其他文字。"""
 
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=150,
-            )
-            text = response.choices[0].message.content.strip()
-            lines = text.split('\n')
-            for line in lines:
-                if line.startswith('text_overlay:'):
-                    text_overlay = line.split(':', 1)[1].strip()
-                elif line.startswith('caption:'):
-                    caption = line.split(':', 1)[1].strip()
+        response = client.chat.completions.create(
+            model=get_text_model("planner_small"),
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=150,
+        )
+        text = response.choices[0].message.content.strip()
+        lines = text.split('\n')
+        for line in lines:
+            if line.startswith('text_overlay:'):
+                text_overlay = line.split(':', 1)[1].strip()
+            elif line.startswith('caption:'):
+                caption = line.split(':', 1)[1].strip()
     except Exception:
         pass
 

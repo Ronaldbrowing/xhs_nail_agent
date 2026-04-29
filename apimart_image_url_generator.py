@@ -9,19 +9,21 @@ from typing import Optional, Dict, Any
 import requests
 
 from project_paths import OUTPUT_DIR
+from src.llm_provider import get_image_settings
 
 
-API_BASE = os.getenv("APIMART_API_BASE", "https://new.apipudding.com")
+def get_api_base() -> str:
+    settings = get_image_settings()
+    base = settings["api_base"]
+    if base.endswith("/v1"):
+        return base[:-3]
+    return base
 
 
 def get_api_key() -> str:
-    api_key = (
-        os.getenv("APIMART_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-        or os.getenv("API_KEY")
-    )
+    api_key = get_image_settings()["api_key"]
     if not api_key:
-        raise RuntimeError("Missing API key env. Tried APIMART_API_KEY, OPENAI_API_KEY, API_KEY")
+        raise RuntimeError("Missing image provider API key. Configure the active LLMProvider first.")
     return api_key
 
 
@@ -32,7 +34,7 @@ def upload_reference_image(reference_image_path: str) -> str:
     if not path.exists():
         raise FileNotFoundError(f"Reference image not found: {path}")
 
-    url = f"{API_BASE}/v1/uploads/images"
+    url = f"{get_api_base()}/v1/uploads/images"
     headers = {
         "Authorization": f"Bearer {api_key}",
     }
@@ -63,7 +65,7 @@ def upload_reference_image(reference_image_path: str) -> str:
 def create_image_generation_task(
     prompt: str,
     image_url: str,
-    model: str = "gpt-image-2",
+    model: str = None,
     size: str = "3:4",
     resolution: str = "1k",
     n: int = 1,
@@ -71,14 +73,14 @@ def create_image_generation_task(
 ) -> str:
     api_key = get_api_key()
 
-    url = f"{API_BASE}/v1/images/generations"
+    url = f"{get_api_base()}/v1/images/generations"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
 
     payload = {
-        "model": model,
+        "model": model or get_image_settings()["model"],
         "prompt": prompt,
         "image_urls": [image_url],
         "size": size,
@@ -117,7 +119,7 @@ def create_image_generation_task(
 def get_task(task_id: str) -> Dict[str, Any]:
     api_key = get_api_key()
 
-    url = f"{API_BASE}/v1/tasks/{task_id}"
+    url = f"{get_api_base()}/v1/tasks/{task_id}"
     headers = {
         "Authorization": f"Bearer {api_key}",
     }
@@ -193,7 +195,7 @@ def wait_for_task_result(
 def generate_image_with_reference(
     prompt: str,
     reference_image_path: str,
-    model: str = "gpt-image-2",
+    model: str = None,
     size: str = "3:4",
     resolution: str = "1k",
     n: int = 1,

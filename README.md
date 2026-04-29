@@ -1,16 +1,34 @@
 # Multi-Agent Image Generation System
 
-多 Agent 协作的图片生成系统，基于 GPT-Image-2（apimart.ai API），支持文生图和图生图两种模式。
+多 Agent 协作的图片生成系统，支持通过统一 `LLMProvider` 配置接入 OpenAI-compatible LLM 与图像 provider，当前内置 `openai` 与 `apimart` 两个 provider。
 
 ## 快速开始
 
 ### 环境变量
 
 ```bash
-export OPENAI_API_KEY=your_api_key_here
-# 或
+export LLM_PROVIDER=apimart
 export APIMART_API_KEY=your_api_key_here
+export APIMART_API_BASE=https://api.apimart.ai/v1
+
+# 或切到 OpenAI 官方
+export LLM_PROVIDER=openai
+export OPENAI_API_KEY=your_api_key_here
+
+# 可选：按业务别名覆盖模型
+export TEXT_MODEL_COPY_SMALL=gpt-4o-mini
+export TEXT_MODEL_PLANNER_SMALL=gpt-4o-mini
+export TEXT_MODEL_TAG_SMALL=gpt-4o-mini
+export TEXT_MODEL_HOOK_SMALL=gpt-4o-mini
+export TEXT_MODEL_VISION_SMALL=gpt-4o-mini
+export IMAGE_MODEL_DEFAULT=gpt-image-2
 ```
+
+说明：
+
+- 所有 provider key 只应保存在服务端环境变量中。
+- 未来 Web 或手机 App 接入时，前端应调用你自己的后端接口，而不是直接持有 provider key。
+- 业务模块不再依赖固定厂商模型名，而是通过模型别名解析真实模型。
 
 ### 快速生成
 
@@ -45,6 +63,24 @@ python batch_generator_v2.py
                                                               ↓
               ← QA ← 档案管理 ← 案例库 ← 生成结果
 ```
+
+### LLMProvider — 统一 provider 配置层
+
+`src/llm_provider.py` 负责：
+
+- 选择当前活跃 provider：`openai` 或 `apimart`
+- 解析 provider 的 `api_key` 与 `base_url`
+- 提供统一的 OpenAI-compatible client factory
+- 通过业务别名解析文本与图片模型
+
+当前业务别名包括：
+
+- `planner_small`
+- `copy_small`
+- `tag_small`
+- `hook_small`
+- `vision_small`
+- `image_default`
 
 ### 文生图 vs 图生图
 
@@ -190,6 +226,14 @@ from verticals.nail.schemas import NailNoteUserInput
 
 | 变量名 | 说明 |
 |--------|------|
-| `OPENAI_API_KEY` | 主 API Key |
-| `APIMART_API_KEY` | apimart API Key（备用） |
-| `APIMART_API_BASE` | API 地址（默认 `https://api.apimart.ai`） |
+| `LLM_PROVIDER` | 当前 provider，支持 `openai` / `apimart` |
+| `OPENAI_API_KEY` | `openai` provider 的服务端 API Key |
+| `OPENAI_API_BASE` | 可选，自定义 OpenAI-compatible base URL |
+| `APIMART_API_KEY` | `apimart` provider 的服务端 API Key |
+| `APIMART_API_BASE` | `apimart` base URL，默认 `https://api.apimart.ai/v1` |
+| `TEXT_MODEL_PLANNER_SMALL` | 可选，覆盖页面规划类文本模型 |
+| `TEXT_MODEL_COPY_SMALL` | 可选，覆盖标题/正文类文本模型 |
+| `TEXT_MODEL_TAG_SMALL` | 可选，覆盖标签生成模型 |
+| `TEXT_MODEL_HOOK_SMALL` | 可选，覆盖评论钩子生成模型 |
+| `TEXT_MODEL_VISION_SMALL` | 可选，覆盖视觉分析/视觉DNA模型 |
+| `IMAGE_MODEL_DEFAULT` | 可选，覆盖默认图片模型 |

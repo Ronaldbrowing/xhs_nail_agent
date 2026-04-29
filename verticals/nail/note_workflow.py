@@ -2,15 +2,11 @@
 NailNoteWorkflow - 小红书美甲图文笔记生产工作流
 顶层编排入口
 """
-import os
-import uuid
 from datetime import datetime
-from pathlib import Path
-from typing import Optional
 
 from .note_workflow_schemas import (
     NailNoteUserInput, NailNotePackage, VisualDNA, NotePageSpec,
-    NoteGoal, model_to_dict,
+    NoteGoal,
 )
 from . import note_templates
 from . import visual_dna_builder
@@ -48,25 +44,7 @@ class NailNoteWorkflow:
     """
 
     def __init__(self):
-        self._client = None
-
-    def _get_client(self):
-        """获取 OpenAI client（懒加载）"""
-        if self._client is None:
-            try:
-                from openai import OpenAI
-                api_key = os.environ.get("OPENAI_API_KEY")
-                if not api_key:
-                    try:
-                        from gpt_image2_generator import get_api_key
-                        api_key = get_api_key()
-                    except ImportError:
-                        pass
-                if api_key:
-                    self._client = OpenAI(api_key=api_key)
-            except Exception:
-                pass
-        return self._client
+        pass
 
     def generate_note(self, user_input: NailNoteUserInput) -> NailNotePackage:
         """

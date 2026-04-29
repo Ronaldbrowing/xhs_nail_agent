@@ -1,23 +1,14 @@
 """
 正文生成器 - 生成完整笔记正文
 """
-import os
 from typing import List
 from .note_workflow_schemas import VisualDNA, NotePageSpec
+from src.llm_provider import get_text_client, get_text_model
 
 
-def _get_openai_client():
+def _get_llm_client():
     try:
-        from openai import OpenAI
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            try:
-                from gpt_image2_generator import get_api_key
-                api_key = get_api_key()
-            except ImportError:
-                pass
-        if api_key:
-            return OpenAI(api_key=api_key)
+        return get_text_client()
     except Exception:
         pass
     return None
@@ -43,7 +34,7 @@ def generate_caption(user_input, visual_dna: VisualDNA, pages: List[NotePageSpec
     finish = visual_dna.finish or '质感'
     style = visual_dna.style or '清透显白'
 
-    client = _get_openai_client()
+    client = _get_llm_client()
 
     if client:
         try:
@@ -71,7 +62,7 @@ def generate_caption(user_input, visual_dna: VisualDNA, pages: List[NotePageSpec
 直接返回正文，不要标题，不要其他说明。"""
 
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_text_model("copy_small"),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=1200,
