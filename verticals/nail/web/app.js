@@ -712,6 +712,7 @@
     submitButton.textContent = "生成中...";
 
     const generateImages = enableImagesField.checked;
+    const caseIdValue = caseIdField && caseIdField.value ? caseIdField.value.trim() : "";
     const payload = sanitizePayload({
       brief: briefField.value,
       style_id: styleField.value,
@@ -719,6 +720,8 @@
       nail_length: nailLengthField.value,
       generate_images: generateImages,
       max_workers: Number(maxWorkersField.value || "1"),
+      reference_image_path: currentReferenceImage ? currentReferenceImage.path : undefined,
+      case_id: caseIdValue || undefined,
     });
 
     try {
@@ -733,6 +736,15 @@
 
       applyStatus("queued", "已提交，等待开始");
       setJobMeta({ job_id: created.job_id, payload: payload });
+      addRecentJob({
+        jobId: created.job_id,
+        noteId: null,
+        generateImages: generateImages,
+        brief: briefField.value.slice(0, 60),
+        status: "queued",
+        createdAt: new Date().toISOString(),
+      });
+      renderRecentJobs();
       saveLastJob({
         jobId: created.job_id,
         noteId: null,
@@ -774,9 +786,144 @@
     }
   });
 
+  // --- Reference image upload ---
+  let currentReferenceImage = null; // { path, previewUrl }
+
+  const refInput = document.getElementById("reference-image-input");
+  const refPlaceholder = document.getElementById("reference-placeholder");
+  const refPreview = document.getElementById("reference-preview");
+  const refPreviewImg = document.getElementById("reference-preview-img");
+  const refRemoveBtn = document.getElementById("reference-remove-btn");
+  const dropZone = document.getElementById("reference-drop-zone");
+
+  function showReferencePreview(previewUrl) {
+    refPlaceholder.hidden = true;
+    refPreview.hidden = false;
+    refPreviewImg.src = previewUrl;
+  }
+
+  function clearReferenceImage() {
+    currentReferenceImage = null;
+    refPreview.hidden = true;
+    refPlaceholder.hidden = false;
+    refPreviewImg.src = "";
+    if (refInput) refInput.value = "";
+  }
+
+  if (refRemoveBtn) {
+    refRemoveBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      clearReferenceImage();
+    });
+  }
+
+  if (dropZone) {
+    dropZone.addEventListener("click", function () {
+      if (refInput) refInput.click();
+    });
+    dropZone.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      dropZone.classList.add("drag-over");
+    });
+    dropZone.addEventListener("dragleave", function () {
+      dropZone.classList.remove("drag-over");
+    });
+    dropZone.addEventListener("drop", function (e) {
+      e.preventDefault();
+      dropZone.classList.remove("drag-over");
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length > 0) {
+        refInput && refInput.files && (refInput.files = files);
+        if (refInput) refInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+  }
+
+  if (refInput) {
+    refInput.addEventListener("change", async function () {
+      const file = refInput.files && refInput.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const resp = await fetch("/api/nail/assets/reference-image", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.detail || "上传失败");
+        }
+        currentReferenceImage = {
+          path: data.reference_image_path,
+          previewUrl: data.preview_url,
+        };
+        showReferencePreview(data.preview_url);
+      } catch (err) {
+        alert("上传失败：" + formatError(err));
+        clearReferenceImage();
+      }
+    });
+  }
+
+  // --- Case ID ---
+  const caseIdField = document.getElementById("case_id");
+
+  // --- Recent jobs (localStorage) ---
+  const RECENT_JOBS_KEY = "nail_studio_recent_jobs";
+  function getRecentJobs() {
+    try {
+      return JSON.parse(localStorage.getItem(RECENT_JOBS_KEY) || "[]");
+    } catch (_) { return []; }
+  }
+  function setRecentJobs(jobs) {
+    try { localStorage.setItem(RECENT_JOBS_KEY, JSON.stringify(jobs)); } catch (_) {}
+  }
+  function addRecentJob(entry) {
+    const jobs = getRecentJobs().filter(function (j) { return j.jobId !== entry.jobId; });
+    jobs.unshift(entry);
+    if (jobs.length > 10) jobs.length = 10;
+    setRecentJobs(jobs);
+  }
+
+  function renderRecentJobs() {
+    const container = document.getElementById("recent-jobs-list");
+    const panel = document.getElementById("recent-jobs-panel");
+    if (!container || !panel) return;
+    const jobs = getRecentJobs();
+    panel.hidden = !jobs.length;
+    if (!jobs.length) return;
+    container.hidden = false;
+    container.innerHTML = "";
+    jobs.forEach(function (job) {
+      const el = document.createElement("button");
+      el.className = "recent-job-item";
+      el.type = "button";
+      el.dataset.jobId = job.jobId;
+      const date = job.createdAt ? new Date(job.createdAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+      const brief = job.brief || "";
+      el.innerHTML = "<span class=\"recent-job-id\">" + (job.jobId || "").slice(0, 12) + "...</span><span class=\"recent-job-brief\">" + brief + "</span><span class=\"recent-job-time\">" + date + "</span>";
+      el.addEventListener("click", function () {
+        const stored = { jobId: job.jobId, noteId: job.noteId, generateImages: job.generateImages };
+        setJobMeta({ job_id: job.jobId });
+        saveLastJob(stored);
+        showResumePanel("发现历史任务，是否继续查看？");
+        resultMeta.textContent = "从最近任务列表恢复，可直接继续查询结果。";
+      });
+      container.appendChild(el);
+    });
+  }
+
+  function loadRecentJobs() {
+    renderRecentJobs();
+  }
+
   initializeFormOptions();
   clearResults();
   applyStatus("idle");
+  loadRecentJobs();
   const storedJob = loadLastJob();
   if (storedJob && storedJob.jobId) {
     setJobMeta(storedJob);

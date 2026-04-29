@@ -3,12 +3,14 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 OUTPUT_DIR = PROJECT_ROOT / "output"
+INPUT_DIR = PROJECT_ROOT / "input"
 CASE_LIBRARY_DIR = PROJECT_ROOT / "case_library"
 
 
 def ensure_project_dirs() -> None:
-    """Create output/ and case_library/ directories if they don't exist."""
+    """Create output/, input/, and case_library/ directories if they don't exist."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    INPUT_DIR.mkdir(parents=True, exist_ok=True)
     CASE_LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
     for task in ["poster", "product", "ppt", "infographic", "teaching"]:
         (CASE_LIBRARY_DIR / task).mkdir(exist_ok=True)

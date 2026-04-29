@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from project_paths import OUTPUT_DIR
+from project_paths import OUTPUT_DIR, INPUT_DIR
 
 from .routes import router
 
@@ -22,3 +22,5 @@ def web_index():
 
 app.mount("/web", StaticFiles(directory=str(WEB_DIR)), name="web")
 app.mount("/static/output", StaticFiles(directory=str(OUTPUT_DIR)), name="static-output")
+INPUT_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static/input", StaticFiles(directory=str(INPUT_DIR)), name="static-input")

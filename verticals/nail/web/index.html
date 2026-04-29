@@ -40,6 +40,11 @@
               </div>
             </div>
 
+            <div id="recent-jobs-panel" class="recent-jobs-panel" hidden>
+              <p class="recent-jobs-title">最近任务</p>
+              <div id="recent-jobs-list" class="recent-jobs-list" hidden></div>
+            </div>
+
             <label class="field field-wide">
               <span>内容需求</span>
               <textarea
@@ -103,6 +108,29 @@
                     <input id="max_workers" name="max_workers" type="number" min="1" max="2" value="1" />
                   </label>
                   <div class="compact-note">默认保持 1，更稳定。只有在确认额度和限流策略后，才建议调高到 2。</div>
+                </div>
+
+                <div id="reference-image-panel" class="field field-wide">
+                  <span>参考图上传</span>
+                  <p class="field-help">上传一张喜欢的美甲参考图，Studio 会尽量继承它的风格方向。</p>
+                  <div id="reference-drop-zone" class="drop-zone">
+                    <input id="reference-image-input" type="file" accept="image/png,image/jpeg,image/jpg,image/webp" hidden />
+                    <div id="reference-placeholder" class="drop-zone-inner">
+                      <div class="drop-zone-icon">📷</div>
+                      <div class="drop-zone-text">点击选择图片或拖拽上传</div>
+                      <div class="drop-zone-hint">支持 png/jpg/jpeg/webp，不超过 10MB</div>
+                    </div>
+                    <div id="reference-preview" class="reference-preview" hidden>
+                      <img id="reference-preview-img" src="" alt="参考图预览" />
+                      <button id="reference-remove-btn" type="button" class="reference-remove-btn" title="移除参考图">✕</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="field field-wide">
+                  <label for="case_id" class="field-label">案例复用</label>
+                  <input id="case_id" name="case_id" type="text" placeholder="例如：case_001" class="text-input" />
+                  <p class="field-help">如果你有历史案例 ID，可以填入后复用它的风格方向。</p>
                 </div>
               </div>
             </details>
