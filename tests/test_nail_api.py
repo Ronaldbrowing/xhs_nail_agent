@@ -43,6 +43,29 @@ class NailFastAPITests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
 
+    def test_root_serves_html_with_web_asset_references(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/html", response.headers.get("content-type", ""))
+        body = response.text
+        self.assertIn("Vertical Content Studio", body)
+        self.assertIn("AI 内容生成工作台", body)
+        self.assertIn("输入需求", body)
+        self.assertIn("内容需求", body)
+        self.assertIn("使用示例", body)
+        self.assertIn("当前内容场景", body)
+        self.assertIn("/web/style.css", body)
+        self.assertIn("/web/app.js", body)
+
+    def test_web_assets_are_accessible(self):
+        js_response = self.client.get("/web/app.js")
+        self.assertEqual(js_response.status_code, 200)
+        self.assertIn("javascript", js_response.headers.get("content-type", ""))
+
+        css_response = self.client.get("/web/style.css")
+        self.assertEqual(css_response.status_code, 200)
+        self.assertIn("text/css", css_response.headers.get("content-type", ""))
+
     def test_post_generate_images_false_returns_job_and_package(self):
         response = self.client.post(
             "/api/nail/notes",

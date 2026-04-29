@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vertical Content Studio</title>
+    <link rel="stylesheet" href="/web/style.css" />
+    <script defer src="/web/app.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="brand">Vertical Content Studio</p>
+          <h1>AI 内容生成工作台</h1>
+          <p class="hero-subtitle">输入一个内容需求，生成适合发布的标题、正文、标签和多页内容结构</p>
+        </div>
+        <div class="hero-badges">
+          <span class="hero-badge">当前内容场景 · 小红书美甲图文</span>
+          <span class="hero-badge hero-badge-soft">快速预览 · 不消耗图片额度</span>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <article class="studio-card composer-card">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">Studio</p>
+              <h2>输入需求</h2>
+            </div>
+            <p class="card-tip">先输入你想做的内容方向，再让 Studio 自动整理成可发布的标题、正文和页面结构。</p>
+          </div>
+
+          <form id="note-form" class="composer-form">
+            <label class="field field-wide">
+              <span>内容需求</span>
+              <textarea
+                id="brief"
+                name="brief"
+                rows="6"
+                placeholder="例如：夏日蓝色猫眼短甲，适合黄皮，显白清透，想要小红书种草风"
+              ></textarea>
+            </label>
+
+            <div class="helper-row">
+              <button id="example-button" type="button" class="secondary-button">使用示例</button>
+              <p class="helper-copy">不确定怎么写时，可以先填充示例，再按你的真实需求改几处关键词。</p>
+            </div>
+
+            <label class="field">
+              <span>内容场景</span>
+              <select id="vertical" name="vertical" disabled>
+                <option value="nail">小红书美甲图文</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>模板选择</span>
+              <select id="style_id" name="style_id"></select>
+              <p id="style-helper" class="field-help"></p>
+            </label>
+
+            <label class="field">
+              <span>适合肤色</span>
+              <select id="skin_tone" name="skin_tone"></select>
+            </label>
+
+            <label class="field">
+              <span>甲型/长度</span>
+              <select id="nail_length" name="nail_length"></select>
+            </label>
+
+            <details class="advanced-panel">
+              <summary>高级设置</summary>
+              <div class="advanced-grid">
+                <div class="field field-wide info-callout">
+                  <strong>快速预览模式</strong>
+                  <p>默认只生成文案和结构，不会消耗图片额度。只有在你主动开启真实图片生成后，才会调用图片 API。</p>
+                </div>
+
+                <div class="field field-wide toggle-panel">
+                  <div class="toggle-copy">
+                    <span>生成真实图片</span>
+                    <p>开启后会额外生成页面图片，耗时更长，适合在方向确认后再使用。</p>
+                  </div>
+                  <label class="toggle" for="enable_images">
+                    <input id="enable_images" name="enable_images" type="checkbox" />
+                    <span class="toggle-track"></span>
+                  </label>
+                </div>
+
+                <div class="field field-wide inline-fields">
+                  <label class="field compact-field">
+                    <span>并发数</span>
+                    <input id="max_workers" name="max_workers" type="number" min="1" max="2" value="1" />
+                  </label>
+                  <div class="compact-note">默认保持 1，更稳定。只有在确认额度和限流策略后，才建议调高到 2。</div>
+                </div>
+              </div>
+            </details>
+
+            <div class="actions">
+              <button id="submit-button" type="submit">生成内容预览</button>
+              <p id="submit-hint" class="submit-hint">默认快速预览，不会生成真实图片</p>
+            </div>
+          </form>
+        </article>
+
+        <article class="studio-card preview-card">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">Progress</p>
+              <h2>生成进度</h2>
+            </div>
+            <span id="status-badge" class="status-badge status-idle">待开始</span>
+          </div>
+
+          <div class="progress-panel">
+            <p id="status-text" class="progress-title">待开始</p>
+            <p id="progress-detail" class="progress-detail">在左侧输入内容需求，点击「生成内容预览」即可开始。</p>
+          </div>
+
+          <details class="dev-panel">
+            <summary>开发信息</summary>
+            <pre id="job-meta" class="code-block">任务开始后，这里会显示任务编号和技术信息。</pre>
+          </details>
+
+          <section id="result-section" class="result-section">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Preview</p>
+                <h2>内容预览</h2>
+              </div>
+              <p id="result-meta" class="section-tip">生成完成后，这里会展示标题、正文、标签和多页内容结构。</p>
+            </div>
+
+            <div id="result-empty" class="empty-state">
+              <strong>还没有内容</strong>
+              <p>生成完成后，这里会展示标题、正文、标签和多页内容结构。</p>
+            </div>
+
+            <div id="note-summary" class="summary-grid"></div>
+            <div id="pages-grid" class="pages-grid"></div>
+          </section>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
