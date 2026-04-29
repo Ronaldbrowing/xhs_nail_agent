@@ -1,7 +1,7 @@
 """
 笔记规划器 - 根据模板生成 NotePageSpec 列表
 """
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from .note_workflow_schemas import NotePageSpec, PageRole, VisualDNA
 
 
@@ -83,31 +83,159 @@ def plan_note_pages(
 ) -> List[NotePageSpec]:
     """
     根据角色-目标对列表，生成 NotePageSpec 列表。
-    
+
     Args:
         user_input: NailNoteUserInput
         visual_dna: VisualDNA
         role_goal_pairs: [(PageRole, goal_str), ...]
-    
+
     Returns:
         NotePageSpec 列表
     """
     brief = getattr(user_input, 'brief', '') or ''
     pages = []
-    
+
     for i, (role, goal) in enumerate(role_goal_pairs):
         page_no = i + 1
-        
+
         # 生成 visual_brief
         visual_brief = _generate_visual_brief_llm(role, brief, visual_dna)
-        
+
+        # 生成 text_overlay 和 caption
+        text_overlay, caption = _generate_text_overlay_and_caption_llm(role, brief, visual_dna)
+
         page = NotePageSpec(
             page_no=page_no,
             role=role,
             goal=goal,
             visual_brief=visual_brief,
+            text_overlay=text_overlay,
+            caption=caption,
             status="planned",
         )
         pages.append(page)
-    
+
     return pages
+
+
+def _generate_text_overlay_and_caption_llm(role: PageRole, brief: str, visual_dna: VisualDNA) -> Tuple[Optional[str], Optional[str]]:
+    """用 LLM 为该页生成 text_overlay（图片文字）和 caption（配文）"""
+    text_overlay = None
+    caption = None
+
+    try:
+        import os
+        from openai import OpenAI
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if api_key:
+            client = OpenAI(api_key=api_key)
+            role_text_overlay_descriptions = {
+                PageRole.cover: "封面大标题，如「夏日显白猫眼✨」",
+                PageRole.detail_closeup: "细节标签，如「猫眼光泽绝了」",
+                PageRole.skin_tone_fit: "对比说明，如「黄皮显白攻略」",
+                PageRole.style_breakdown: "要素标签，如「颜色·甲型·质感」",
+                PageRole.scene_mood: "氛围文案，如「海边约会必备」",
+                PageRole.avoid_mistakes: "避雷提示，如「做错毁所有」",
+                PageRole.save_summary: "总结金句，如「收藏！超全美甲攻略」",
+                PageRole.materials: "材料清单标题，如「需要的材料都在这」",
+                PageRole.step_by_step: "步骤引导，如「跟我做！超简单」",
+                PageRole.comparison_grid: "对比说明，如「哪款最适合你」",
+                PageRole.collection_grid: "合集标题，如「私藏6款绝美猫眼」",
+            }
+            role_caption_descriptions = {
+                PageRole.cover: "吸引点击的开头，如「姐妹们！这也太好看了吧」",
+                PageRole.detail_closeup: "强调质感的描述，如「阳光下绝美光泽」",
+                PageRole.skin_tone_fit: "肤色适配说明，如「黄皮亲测显白」",
+                PageRole.style_breakdown: "款式拆解说明，如「三个要点教你选对款式」",
+                PageRole.scene_mood: "场景氛围描述，如「约会/通勤/度假都能hold住」",
+                PageRole.avoid_mistakes: "避雷提醒，如「这几个坑千万别踩」",
+                PageRole.save_summary: "收藏引导，如「建议收藏！超全美甲指南」",
+                PageRole.materials: "材料介绍，如「新手友好！需要的都在这」",
+                PageRole.step_by_step: "教程引导，如「跟着做不出错」",
+                PageRole.comparison_grid: "对比总结，如「测评结果出炉」",
+                PageRole.collection_grid: "合集推荐，如「私藏宝藏款式」",
+            }
+
+            overlay_hint = role_text_overlay_descriptions.get(role, "简短有力的文字")
+            caption_hint = role_caption_descriptions.get(role, "配合图片的简短文案")
+
+            prompt = f"""根据以下美甲页面信息，生成该页的：
+1. text_overlay：图片上叠加的文字（简短有力，10字以内，适合小红书风格）
+2. caption：图片配文（配合图片的说明文字，20-50字）
+
+页面角色：{role.value}
+用户需求：{brief}
+甲长：{visual_dna.nail_length or '未指定'}
+甲型：{visual_dna.nail_shape or '未指定'}
+主色调：{visual_dna.main_color or '未指定'}
+质感：{visual_dna.finish or '未指定'}
+风格：{visual_dna.style or '未指定'}
+
+text_overlay 示例：{overlay_hint}
+caption 示例：{caption_hint}
+
+请直接返回，格式如下（两行）：
+text_overlay: <文字>
+caption: <配文>
+
+只返回这两行，不要其他文字。"""
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=150,
+            )
+            text = response.choices[0].message.content.strip()
+            lines = text.split('\n')
+            for line in lines:
+                if line.startswith('text_overlay:'):
+                    text_overlay = line.split(':', 1)[1].strip()
+                elif line.startswith('caption:'):
+                    caption = line.split(':', 1)[1].strip()
+    except Exception:
+        pass
+
+    # Fallback
+    if text_overlay is None:
+        text_overlay = _text_overlay_fallback(role, brief, visual_dna)
+    if caption is None:
+        caption = _caption_fallback(role, brief, visual_dna)
+
+    return text_overlay, caption
+
+
+def _text_overlay_fallback(role: PageRole, brief: str, visual_dna: VisualDNA) -> str:
+    """规则生成 text_overlay fallback"""
+    overlays = {
+        PageRole.cover: f"{visual_dna.main_color or '美甲'}{visual_dna.finish or '款'}✨",
+        PageRole.detail_closeup: "绝美国货✨",
+        PageRole.skin_tone_fit: f"{visual_dna.skin_tone or '黄皮'}显白攻略",
+        PageRole.style_breakdown: "三要素拆解",
+        PageRole.scene_mood: f"{visual_dna.style or '夏日'}必备",
+        PageRole.avoid_mistakes: "避雷必看⚠️",
+        PageRole.save_summary: "建议收藏✅",
+        PageRole.materials: "材料清单📦",
+        PageRole.step_by_step: "跟我做👆",
+        PageRole.comparison_grid: "测评对比",
+        PageRole.collection_grid: "私藏合集",
+    }
+    return overlays.get(role, "美甲✨")
+
+
+def _caption_fallback(role: PageRole, brief: str, visual_dna: VisualDNA) -> str:
+    """规则生成 caption fallback"""
+    captions = {
+        PageRole.cover: f"姐妹们！{visual_dna.main_color or '这款'}{visual_dna.nail_shape or '美甲'}{visual_dna.finish or ''}也太好看了吧✨",
+        PageRole.detail_closeup: f"阳光下{visual_dna.main_color or '这颜色'}的猫眼光泽绝了",
+        PageRole.skin_tone_fit: f"{visual_dna.skin_tone or '黄皮'}亲测{visual_dna.main_color or '这个颜色'}超级显白",
+        PageRole.style_breakdown: f"颜色·甲型·质感三要素教你选对款式",
+        PageRole.scene_mood: f"{visual_dna.style or '夏日'}氛围感满满，约会通勤都适合",
+        PageRole.avoid_mistakes: f"这几个坑美甲师不会告诉你的",
+        PageRole.save_summary: f"建议收藏！超全{visual_dna.main_color or '美甲'}攻略",
+        PageRole.materials: f"新手友好！做{visual_dna.main_color or '这款'}需要这些材料",
+        PageRole.step_by_step: f"跟我做！简单几步搞定{visual_dna.main_color or '这款'}",
+        PageRole.comparison_grid: f"多款{visual_dna.main_color or '美甲'}测评，哪款最适合你",
+        PageRole.collection_grid: f"私藏{visual_dna.main_color or '美甲'}款式合集",
+    }
+    return captions.get(role, f"{visual_dna.main_color or '美甲'}{visual_dna.nail_shape or ''}{visual_dna.finish or ''}，超好看✨")

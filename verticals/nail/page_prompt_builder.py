@@ -75,6 +75,9 @@ def _build_negative_prompt(visual_dna: VisualDNA, role: PageRole) -> str:
 def _compose_prompt_parts(
     role: PageRole,
     visual_dna: VisualDNA,
+    brief: str = "",
+    page_goal: str = "",
+    visual_brief: str = "",
     text_overlay: Optional[str] = None,
     allow_text: bool = False,
 ) -> dict:
@@ -83,49 +86,61 @@ def _compose_prompt_parts(
     返回 {'prompt': str, 'negative_prompt': str}
     """
     parts = []
-    
-    # 1. 角色前缀
+
+    # 1. 简短目标说明
+    if page_goal:
+        parts.append(f"目标：{page_goal}。")
+
+    # 2. 角色前缀
     role_prefix = _ROLE_PROMPTS.get(role, "小红书美甲图片。")
     parts.append(role_prefix)
-    
-    # 2. 手型/肤色
+
+    # 3. 用户原始需求
+    if brief:
+        parts.append(f"用户需求：{brief}。")
+
+    # 4. 视觉简报
+    if visual_brief:
+        parts.append(f"视觉简报：{visual_brief}。")
+
+    # 5. 手型/肤色
     if visual_dna.hand_model:
         parts.append(f"手型：{visual_dna.hand_model}。")
     if visual_dna.skin_tone:
         parts.append(f"肤色：{visual_dna.skin_tone}。")
-    
-    # 3. 甲型/甲长
+
+    # 6. 甲型/甲长
     if visual_dna.nail_shape:
         parts.append(f"甲型：{visual_dna.nail_shape}。")
     if visual_dna.nail_length:
         parts.append(f"甲长：{visual_dna.nail_length}。")
-    
-    # 4. 颜色/质感
+
+    # 7. 颜色/质感
     if visual_dna.main_color:
         parts.append(f"主色调：{visual_dna.main_color}。")
     if visual_dna.finish:
         parts.append(f"质感：{visual_dna.finish}。")
-    
-    # 5. 光线/背景
+
+    # 8. 光线/背景
     if visual_dna.lighting:
         parts.append(f"光线：{visual_dna.lighting}。")
     if visual_dna.background:
         parts.append(f"背景：{visual_dna.background}。")
-    
-    # 6. 风格
+
+    # 9. 风格
     if visual_dna.style:
         parts.append(f"风格：{visual_dna.style}。")
-    
-    # 7. 文字叠加（封面/总结页）
+
+    # 10. 文字叠加（封面/总结页）
     if allow_text and text_overlay:
         parts.append(f"图片上方或下方可添加文字区域，内容为：「{text_overlay}」。文字需清晰可读。")
-    
-    # 8. 小红书风格要求
+
+    # 11. 小红书风格要求
     parts.append("小红书图文风格，画面精美，高质感，无水印。")
-    
+
     prompt = " ".join(parts)
     negative = _build_negative_prompt(visual_dna, role)
-    
+
     return {"prompt": prompt, "negative_prompt": negative}
 
 
@@ -136,27 +151,33 @@ def build_page_prompt(
 ) -> NotePageSpec:
     """
     为 NotePageSpec 编译 prompt 和 negative_prompt。
-    
+
     Args:
         page: NotePageSpec（会被原地修改）
         visual_dna: VisualDNA
         user_input: NailNoteUserInput
-    
+
     Returns:
         修改后的 NotePageSpec
     """
+    brief = getattr(user_input, 'brief', '') or ''
     allow_text = getattr(user_input, 'allow_text_on_image', False)
     text_overlay = page.text_overlay
-    
+    page_goal = page.goal or ''
+    visual_brief = page.visual_brief or ''
+
     result = _compose_prompt_parts(
         role=page.role,
         visual_dna=visual_dna,
+        brief=brief,
+        page_goal=page_goal,
+        visual_brief=visual_brief,
         text_overlay=text_overlay,
         allow_text=allow_text,
     )
-    
+
     page.prompt = result["prompt"]
     page.negative_prompt = result["negative_prompt"]
     page.status = "prompt_ready"
-    
+
     return page

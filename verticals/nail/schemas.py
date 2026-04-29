@@ -1,6 +1,16 @@
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
 
+# Re-export NailNoteWorkflow types for convenient importing from verticals.nail.schemas
+from .note_workflow_schemas import (
+    NailNoteUserInput,
+    NailNotePackage,
+    NoteGoal,
+    PageRole,
+    VisualDNA,
+    NotePageSpec,
+)
+
 @dataclass
 class UserInput:
     brief: str

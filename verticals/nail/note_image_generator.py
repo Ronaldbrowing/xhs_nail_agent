@@ -11,25 +11,27 @@ from .note_workflow_schemas import NailNotePackage, NailNoteUserInput, NotePageS
 
 def _get_note_output_dir(package: NailNotePackage) -> Path:
     """获取笔记输出目录（绝对路径）"""
-    from project_paths import PROJECT_ROOT
+    from project_paths import PROJECT_ROOT, resolve_project_path
     if package.output_dir:
         out = Path(package.output_dir)
         if out.is_absolute():
             return out
-        return PROJECT_ROOT / out
+        resolved = resolve_project_path(package.output_dir)
+        return resolved
     return PROJECT_ROOT / "output" / package.note_id
 
 
 def _copy_image_to_note_dir(src_path: str, page: NotePageSpec, note_dir: Path) -> str:
     """
     将生成的图片复制到笔记目录，并重命名为 page_XX_role.png。
-    
+
     Returns:
         相对路径（项目相对路径）
     """
-    from project_paths import to_project_relative
-    
-    src = Path(src_path)
+    from project_paths import to_project_relative, resolve_project_path
+
+    # 解析图片路径（支持 filepath/image_path/path/local_path 多种字段名）
+    src = resolve_project_path(src_path)
     if not src.exists():
         return src_path
     
@@ -52,55 +54,73 @@ def _generate_single_page(
 ) -> NotePageSpec:
     """
     为单页生成图片。
-    
+
     流程：
     1. 调用 orchestrator_v2.run() 生成图片
     2. 复制图片到笔记输出目录
     3. 更新 page 的 image_path 和 status
     """
     from orchestrator_v2 import run
-    
+    from project_paths import resolve_project_path
+
     if not page.prompt:
         page.status = "failed"
         page.issues.append("No prompt available")
         return page
-    
+
+    # 判断是否使用参考图
+    reference_image_path = getattr(user_input, 'reference_image_path', None)
+    case_id = getattr(user_input, 'case_id', None)
+    use_reference = bool(reference_image_path or case_id)
+
     try:
         # 调用 orchestrator_v2.run() 生成图片
         task = "poster"
         direction = getattr(user_input, 'direction', 'balanced') or 'balanced'
         aspect = getattr(user_input, 'aspect', '3:4') or '3:4'
         quality = getattr(user_input, 'quality', 'final') or 'final'
-        
+
         result = run(
             user_input=page.prompt,
-            use_reference=False,  # note_workflow 自己管理参考图
+            use_reference=use_reference,
             task=task,
             direction=direction,
             aspect=aspect,
             quality=quality,
             precompiled_brief=True,
+            reference_image_path=reference_image_path if use_reference else None,
         )
-        
-        # 提取图片路径
+
+        # 提取图片路径（兼容多种字段名）
         if isinstance(result, dict):
-            filepath = result.get("filepath") or result.get("image_path") or result.get("path")
+            filepath = (
+                result.get("filepath")
+                or result.get("image_path")
+                or result.get("path")
+                or result.get("local_path")
+            )
         else:
             filepath = None
-        
-        if filepath and Path(filepath).exists():
-            # 复制到笔记目录
-            rel_path = _copy_image_to_note_dir(filepath, page, note_dir)
-            page.image_path = rel_path
-            page.status = "generated"
+
+        # 解析路径（支持相对路径）
+        if filepath:
+            resolved = resolve_project_path(filepath)
+            if resolved.exists():
+                rel_path = _copy_image_to_note_dir(str(resolved), page, note_dir)
+                page.image_path = rel_path
+                page.status = "generated"
+                page.used_reference = use_reference
+            else:
+                page.status = "failed"
+                page.issues.append(f"Resolved filepath does not exist: {resolved}")
         else:
             page.status = "failed"
             page.issues.append(f"No valid filepath returned: {result}")
-            
+
     except Exception as e:
         page.status = "failed"
         page.issues.append(str(e))
-    
+
     return page
 
 

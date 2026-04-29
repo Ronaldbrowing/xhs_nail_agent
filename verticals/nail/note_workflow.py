@@ -254,7 +254,27 @@ class NailNoteWorkflow:
         print(f"[评论钩子] ✅ 已生成 {hook_count} 个评论钩子")
         print()
 
-        # 9. QA 检查
+        # 9. 生成图片（如果需要）
+        if user_input.generate_images:
+            print("[图片生成] 🔄 开始生成图片...")
+            try:
+                from .note_image_generator import generate_note_images
+                gen_result = generate_note_images(package, user_input)
+                print(f"[图片生成] ✅ 图片生成完成")
+                for page in package.pages:
+                    if page.status == "generated":
+                        print(f"   page_{page.page_no}: {page.image_path}")
+                    elif page.status == "failed":
+                        print(f"   page_{page.page_no}: ❌ FAILED")
+            except Exception as e:
+                print(f"[图片生成] ⚠️ 生成失败: {e}")
+                package.diagnostics["image_gen_error"] = str(e)
+                package.partial_failure = True
+        else:
+            print("[图片生成] ⏭️ 已跳过（generate_images=False）")
+        print()
+
+        # 10. QA 检查（图片生成之后）
         print("[QA检查] 🔄 运行质量检查...")
         try:
             qa_result = note_qa_module.qa_note_package(package)
@@ -268,7 +288,53 @@ class NailNoteWorkflow:
             package.diagnostics["qa_error"] = str(e)
         print()
 
-        # 10. 保存 note_package.json 和 archive.json
+        # 11. 最终结果计算
+        # 检查封面页状态
+        cover_page = package.pages[0] if package.pages else None
+        cover_failed = cover_page and cover_page.status == "failed"
+
+        # 检查内页失败（用于 partial_failure）
+        inner_pages_failed = sum(
+            1 for p in package.pages[1:] if p.status == "failed"
+        )
+
+        if user_input.generate_images:
+            # generate_images=True：图片必须生成成功
+            package.success = (
+                len(package.pages) >= 6
+                and len(package.title_candidates) >= 10
+                and len(package.tags) >= 15
+                and len(package.comment_hooks) >= 3
+                and bool(package.body)
+                and package.package_path is not None
+                and cover_page is not None
+                and cover_page.status == "generated"
+                and cover_page.image_path is not None
+            )
+            # 封面失败时 success=False，内页失败时 partial_failure=True
+            if cover_failed:
+                package.partial_failure = True
+            elif inner_pages_failed > 0:
+                package.partial_failure = True
+        else:
+            # generate_images=False：不要求图片
+            package.success = (
+                len(package.pages) >= 6
+                and len(package.title_candidates) >= 10
+                and len(package.tags) >= 15
+                and len(package.comment_hooks) >= 3
+                and bool(package.body)
+                and package.package_path is not None
+            )
+
+        print(f"[结果] success={package.success} partial_failure={package.partial_failure}")
+        if cover_failed:
+            print(f"[结果] ⚠️ 封面页生成失败")
+        if inner_pages_failed > 0:
+            print(f"[结果] ⚠️ {inner_pages_failed} 个内页生成失败")
+        print()
+
+        # 12. 保存 note_package.json 和 archive.json（最终计算之后）
         print("[发布包] 🔄 保存发布包...")
         try:
             ok = package_writer.write_note_package(package, output_dir)
@@ -281,34 +347,6 @@ class NailNoteWorkflow:
             print(f"[发布包] ⚠️ 保存异常: {e}")
             package.diagnostics["package_writer_error"] = str(e)
         print()
-
-        # 11. 生成图片（如果需要）
-        if user_input.generate_images:
-            print("[图片生成] 🔄 开始生成图片...")
-            try:
-                from .note_image_generator import generate_note_images
-                gen_result = generate_note_images(package, user_input)
-                print(f"[图片生成] ✅ 图片生成完成")
-                for page in package.pages:
-                    if page.status == "generated":
-                        print(f"   page_{page.page_no}: {page.image_path}")
-            except Exception as e:
-                print(f"[图片生成] ⚠️ 生成失败: {e}")
-                package.diagnostics["image_gen_error"] = str(e)
-                package.partial_failure = True
-        else:
-            print("[图片生成] ⏭️ 已跳过（generate_images=False）")
-        print()
-
-        # 12. 最终结果
-        package.success = (
-            len(package.pages) >= 6
-            and len(package.title_candidates) >= 10
-            and len(package.tags) >= 15
-            and len(package.comment_hooks) >= 3
-            and bool(package.body)
-            and package.package_path is not None
-        )
 
         print("=" * 70)
         print(f"💅 生成完成 | success={package.success} | partial_failure={package.partial_failure}")

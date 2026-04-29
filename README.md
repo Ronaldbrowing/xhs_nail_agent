@@ -96,21 +96,51 @@ python case_library.py search 关键词   # 搜索案例
 **使用方式：**
 
 ```python
-from verticals.nail.schemas import UserInput
-from verticals.nail.nail_workflow import NailWorkflow
+from verticals.nail.note_workflow import NailNoteWorkflow
+from verticals.nail.note_workflow_schemas import NailNoteUserInput
 
-user_input = UserInput(
-    brief="夏日蓝色猫眼短甲，适合黄皮，显白清透",
-    style_id="single_seed_summer_cat_eye_short",  # 指定款式
-    skin_tone="黄皮",
-    nail_length="短甲",
-    allow_text_on_image=False,
-    reference_image_path="/path/to/ref.png",  # 可选参考图
+workflow = NailNoteWorkflow()
+
+# generate_images=False：只生成文案，不生成图片
+package = workflow.generate_note(
+    NailNoteUserInput(
+        brief="夏日蓝色猫眼短甲，适合黄皮，显白清透",
+        style_id="single_seed_summer_cat_eye_short",
+        skin_tone="黄皮",
+        nail_length="短甲",
+        nail_shape="短方圆",
+        note_goal="seed",
+        page_count=6,
+        generate_images=False,
+    )
 )
+print(f"success={package.success}, title={package.selected_title}")
+```
 
-workflow = NailWorkflow()
-prepared = workflow.prepare(user_input)       # 生成 Prompt + 文案候选
-result = workflow.generate_image(prepared)    # 调用 orchestrator_v2 生成图片
+```python
+# generate_images=True：生成文案 + 图片
+package = workflow.generate_note(
+    NailNoteUserInput(
+        brief="夏日蓝色猫眼短甲，适合黄皮，显白清透",
+        style_id="single_seed_summer_cat_eye_short",
+        skin_tone="黄皮",
+        nail_length="短甲",
+        nail_shape="短方圆",
+        note_goal="seed",
+        page_count=6,
+        generate_images=True,
+        reference_image_path="/path/to/ref.png",  # 可选参考图
+    )
+)
+print(f"success={package.success}, pages={len(package.pages)}")
+for page in package.pages:
+    print(f"  page_{page.page_no}: status={page.status}, image={page.image_path}")
+```
+
+**兼容导入方式（PRD 验收可用）：**
+
+```python
+from verticals.nail.schemas import NailNoteUserInput
 ```
 
 **不指定 style_id** 时，系统按关键词自动匹配款式（"合集"→合集封面、"教程"→DIY步骤、"避雷"→翻车对比等）。
@@ -123,7 +153,7 @@ result = workflow.generate_image(prepared)    # 调用 orchestrator_v2 生成图
 .
 ├── orchestrator_v2.py        # 主工作流编排
 ├── design_compiler.py        # Prompt 编译器
-├── gpt_image2_generator.py  # 文生图 API
+├── gpt_image2_generator.py   # 文生图 API
 ├── apimart_image_url_generator.py  # 图生图 API
 ├── case_library.py           # 案例库管理
 ├── project_paths.py          # 路径管理工具
@@ -139,16 +169,21 @@ result = workflow.generate_image(prepared)    # 调用 orchestrator_v2 生成图
 │   └── teaching/
 └── verticals/               # 垂直行业工作流
     └── nail/                # 小红书美甲图文
-        ├── nail_workflow.py          # 行业工作流编排
+        ├── note_workflow.py          # 笔记工作流编排（NailNoteWorkflow）
+        ├── note_workflow_schemas.py  # 笔记数据模型（Pydantic）
+        ├── note_planner.py           # 页面规划器
+        ├── page_prompt_builder.py    # 页面 Prompt 编译器
+        ├── note_image_generator.py   # 笔记图片生成器
+        ├── note_qa.py                # 笔记 QA 检查
+        ├── package_writer.py         # 发布包写入
+        ├── title_generator.py        # 标题生成
+        ├── caption_generator.py      # 正文生成
+        ├── tag_generator.py          # TAG 生成
+        ├── comment_hook_generator.py # 评论钩子生成
+        ├── visual_dna_builder.py     # 视觉 DNA 构建
         ├── image_runner_adapter.py   # 桥接到 orchestrator_v2
-        ├── prompt_builder.py         # 行业专用 Prompt 构建
-        ├── copy_generator.py         # 小红书文案生成
-        ├── dna_extractor.py          # 参考图 DNA 提取
-        ├── style_matcher.py          # 款式自动匹配
-        ├── style_registry.py         # 款式加载
-        ├── preview_builder.py         # 预览数据打包
-        ├── schemas.py                # 数据模型定义
-        └── styles/                   # 7 种款式配置 JSON
+        ├── schemas.py                # 数据模型定义（re-export）
+        └── styles/                   # 款式配置 JSON
 ```
 
 ## 环境变量

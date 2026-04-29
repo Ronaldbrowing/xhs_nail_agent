@@ -10,7 +10,8 @@ try:
     from pydantic import BaseModel, ConfigDict, Field
     PYDANTIC_V2 = True
 except ImportError:
-    from pydantic import BaseModel
+    from pydantic import BaseModel, Field
+    ConfigDict = dict  # v1 fallback
     PYDANTIC_V2 = False
 
 

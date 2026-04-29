@@ -82,8 +82,61 @@ def qa_note_package(package: NailNotePackage) -> Dict:
     if package.package_path and package.package_path.startswith("/"):
         issues.append(f"package_path 是绝对路径: {package.package_path}")
         score -= 0.5
-    
-    # 8. 检查视觉DNA
+
+    # 8. 检查封面页
+    if package.pages:
+        cover_page = package.pages[0]
+        cover_role = cover_page.role
+        if hasattr(cover_role, 'value'):
+            cover_role = cover_role.value
+        if cover_role != "cover":
+            issues.append(f"第1页角色应该是 cover，实际是 {cover_role}")
+            score -= 1.0
+        # 封面页状态检查（如果生成了图片）
+        if cover_page.status == "generated":
+            if not cover_page.image_path:
+                issues.append("封面页 status=generated 但无 image_path")
+                score -= 2.0
+            else:
+                # 检查图片路径是否存在
+                try:
+                    from pathlib import Path
+                    img_p = Path(cover_page.image_path)
+                    if not img_p.is_absolute():
+                        from project_paths import PROJECT_ROOT
+                        img_p = PROJECT_ROOT / img_p
+                    if not img_p.exists():
+                        issues.append(f"封面图片路径不存在: {cover_page.image_path}")
+                        score -= 2.0
+                except Exception:
+                    pass
+        elif cover_page.status == "failed":
+            issues.append("封面页生成失败")
+            score -= 2.0
+
+    # 9. 检查内页图片路径（status=generated 的页面必须有 image_path）
+    for i, page in enumerate(package.pages[1:], start=2):
+        if page.status == "generated" and not page.image_path:
+            issues.append(f"第{i}页 status=generated 但无 image_path")
+            score -= 1.0
+
+    # 10. 检查 package 是否已保存
+    if not package.package_path:
+        issues.append("package_path 为空，package 尚未保存")
+        score -= 1.0
+    else:
+        try:
+            pkg_p = Path(package.package_path)
+            if not pkg_p.is_absolute():
+                from project_paths import PROJECT_ROOT
+                pkg_p = PROJECT_ROOT / pkg_p
+            if not pkg_p.exists():
+                issues.append(f"note_package.json 不存在: {package.package_path}")
+                score -= 1.0
+        except Exception:
+            pass
+
+    # 12. 检查视觉DNA
     if not package.visual_dna:
         issues.append("visual_dna 为空")
         score -= 1.0
