@@ -34,12 +34,13 @@ class NailNoteCreateRequest(_Model):
     case_id: Optional[str] = None
     max_workers: int = 1
 
-    def to_user_input(self) -> NailNoteUserInput:
+    def as_dict(self) -> Dict[str, Any]:
         if PYDANTIC_V2:
-            data = self.model_dump()
-        else:
-            data = self.dict()
-        return NailNoteUserInput(**data)
+            return self.model_dump()
+        return self.dict()
+
+    def to_user_input(self) -> NailNoteUserInput:
+        return NailNoteUserInput(**self.as_dict())
 
 
 class NailNotePageResponse(_Model):

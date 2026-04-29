@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import List, Optional
 
 from verticals.nail.note_workflow import NailNoteWorkflow
@@ -56,10 +57,19 @@ def build_create_response(
     )
 
 
-def create_nail_note(request: NailNoteCreateRequest) -> NailNoteCreateResponse:
-    request_id = "req_{token}".format(token=uuid.uuid4().hex[:12])
-    create_job(request_id, payload=request.dict() if hasattr(request, "dict") else request.model_dump(), status="queued")
-    update_job(request_id, status="running")
+def create_nail_note(request: NailNoteCreateRequest, request_id: Optional[str] = None) -> NailNoteCreateResponse:
+    request_id = request_id or "req_{token}".format(token=uuid.uuid4().hex[:12])
+    payload = request.as_dict()
+    if create_job is not None:
+        existing = None
+        try:
+            from .job_store import get_job
+            existing = get_job(request_id)
+        except Exception:
+            existing = None
+        if existing is None:
+            create_job(request_id, payload=payload, status="queued")
+    update_job(request_id, status="running", started_at=datetime.now().isoformat(), error=None)
 
     workflow = NailNoteWorkflow()
     try:
@@ -71,10 +81,11 @@ def create_nail_note(request: NailNoteCreateRequest) -> NailNoteCreateResponse:
             note_id=package.note_id,
             package_path=package.package_path,
             output_dir=package.output_dir,
+            finished_at=datetime.now().isoformat(),
         )
         return build_create_response(request_id=request_id, package=package, status=status, errors=[])
     except Exception as exc:
-        update_job(request_id, status="failed", error=str(exc))
+        update_job(request_id, status="failed", error=str(exc), finished_at=datetime.now().isoformat())
         return build_create_response(
             request_id=request_id,
             package=None,
