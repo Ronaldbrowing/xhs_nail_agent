@@ -23,6 +23,11 @@ from .schemas import HealthResponse, JobCreatedResponse, JobStatusResponse
 router = APIRouter()
 _NOTE_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
+
+@router.get("/health", response_model=HealthResponse)
+def health():
+    return {"status": "ok"}
+
 # ── Vertical Registry helpers ────────────────────────────────────────────────
 
 _registry = VerticalRegistry.get_instance()
