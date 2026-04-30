@@ -183,6 +183,14 @@ class NailFastAPITests(unittest.TestCase):
 
         job_payload = self._wait_for_job(payload["job_id"])
         self.assertEqual(job_payload["status"], "succeeded")
+        self.assertEqual(job_payload["stage"], "completed")
+        self.assertTrue(job_payload["started_at"])
+        self.assertTrue(job_payload["updated_at"])
+        self.assertTrue(job_payload["completed_at"])
+        self.assertIsNotNone(job_payload["elapsed_seconds"])
+        self.assertGreaterEqual(job_payload["elapsed_seconds"], 0.0)
+        self.assertIn("error_summary", job_payload)
+        self.assertIsNone(job_payload["failed_stage"])
         package_path = job_payload["package_path"]
         self.assertTrue(package_path)
         self.assertTrue(resolve_project_path(package_path).exists())

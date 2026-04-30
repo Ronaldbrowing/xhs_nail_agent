@@ -3,6 +3,7 @@ import re
 import shutil
 import threading
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -158,6 +159,41 @@ def _run_create_job(job_id: str, request: NailNoteCreateRequest) -> None:
     create_nail_note(request, request_id=job_id)
 
 
+def _derive_job_stage(job: Dict[str, Any]) -> Optional[str]:
+    status_value = job.get("status")
+    current_stage = job.get("stage")
+    if current_stage and not (current_stage == "queued" and status_value != "queued"):
+        return current_stage
+    if status_value == "queued":
+        return "queued"
+    if status_value == "running":
+        return "workflow_running"
+    if status_value in ("succeeded", "partial_failed"):
+        return "completed"
+    if status_value == "failed":
+        return "failed"
+    return None
+
+
+def _compute_elapsed_seconds(job: Dict[str, Any]) -> Optional[float]:
+    started_at = job.get("started_at")
+    if not started_at:
+        return None
+    try:
+        started = datetime.fromisoformat(started_at)
+    except ValueError:
+        return None
+
+    end_value = job.get("completed_at") or job.get("finished_at") or job.get("updated_at")
+    if not end_value:
+        return None
+    try:
+        end = datetime.fromisoformat(end_value)
+    except ValueError:
+        return None
+    return round(max((end - started).total_seconds(), 0.0), 3)
+
+
 def _validate_nail_reference_source(request: NailNoteCreateRequest) -> None:
     if request.reference_source != "case_id":
         return
@@ -260,6 +296,12 @@ def get_job_status(job_id: str) -> JobStatusResponse:
     job = get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
+    job = dict(job)
+    job["stage"] = _derive_job_stage(job)
+    job["completed_at"] = job.get("completed_at") or job.get("finished_at")
+    job["failed_stage"] = job.get("failed_stage")
+    job["error_summary"] = job.get("error_summary") or job.get("error")
+    job["elapsed_seconds"] = _compute_elapsed_seconds(job)
     return JobStatusResponse(**job)
 
 

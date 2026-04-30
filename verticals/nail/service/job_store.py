@@ -24,15 +24,19 @@ def create_job(job_id: str, payload: Optional[Dict[str, Any]] = None, status: st
             "job_id": job_id,
             "request_id": job_id,
             "status": status,
+            "stage": "queued",
             "payload": payload or {},
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
             "started_at": None,
             "finished_at": None,
+            "completed_at": None,
             "note_id": None,
             "package_path": None,
             "output_dir": None,
             "error": None,
+            "failed_stage": None,
+            "error_summary": None,
         }
         _JOBS[job_id] = record
         _persist()
@@ -44,8 +48,14 @@ def update_job(job_id: str, **fields) -> Dict[str, Any]:
         record = _JOBS.get(job_id)
         if record is None:
             record = create_job(job_id)
+
+        if "finished_at" in fields and "completed_at" not in fields:
+            fields["completed_at"] = fields["finished_at"]
+        if "completed_at" in fields and "finished_at" not in fields:
+            fields["finished_at"] = fields["completed_at"]
+
         record.update(fields)
-        record["updated_at"] = datetime.now().isoformat()
+        record["updated_at"] = fields.get("updated_at", datetime.now().isoformat())
         _persist()
         return dict(record)
 

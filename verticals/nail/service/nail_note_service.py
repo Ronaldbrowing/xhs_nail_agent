@@ -35,6 +35,22 @@ def _package_error_summary(package: NailNotePackage) -> Optional[str]:
     return None
 
 
+def _package_failed_stage(package: NailNotePackage) -> Optional[str]:
+    diagnostics = dict(getattr(package, "diagnostics", {}) or {})
+    failed_stage = diagnostics.get("failed_stage")
+    if failed_stage:
+        return str(failed_stage)
+
+    failed_reason = diagnostics.get("failed_reason")
+    if failed_reason:
+        return str(failed_reason)
+
+    for page in getattr(package, "pages", []) or []:
+        if getattr(page, "status", None) == "failed":
+            return "image_generation"
+    return None
+
+
 def _package_status(package: NailNotePackage) -> str:
     if package.success and package.partial_failure:
         return "partial_failed"
@@ -95,25 +111,45 @@ def create_nail_note(request: NailNoteCreateRequest, request_id: Optional[str] =
             existing = None
         if existing is None:
             create_job(request_id, payload=payload, status="queued")
-    update_job(request_id, status="running", started_at=datetime.now().isoformat(), error=None)
+    update_job(
+        request_id,
+        status="running",
+        stage="workflow_running",
+        started_at=datetime.now().isoformat(),
+        error=None,
+        error_summary=None,
+        failed_stage=None,
+    )
 
     workflow = NailNoteWorkflow()
     try:
         package = workflow.generate_note(request.to_user_input(request_id=request_id))
         status = _package_status(package)
+        error_summary = _package_error_summary(package)
         update_job(
             request_id,
             status=status,
+            stage="completed" if status in ("succeeded", "partial_failed") else "failed",
             note_id=package.note_id,
             package_path=package.package_path,
             output_dir=package.output_dir,
-            error=_package_error_summary(package),
+            error=error_summary,
+            error_summary=error_summary,
+            failed_stage=_package_failed_stage(package),
             diagnostics=dict(getattr(package, "diagnostics", {}) or {}),
             finished_at=datetime.now().isoformat(),
         )
         return build_create_response(request_id=request_id, package=package, status=status, errors=[])
     except Exception as exc:
-        update_job(request_id, status="failed", error=str(exc), finished_at=datetime.now().isoformat())
+        update_job(
+            request_id,
+            status="failed",
+            stage="failed",
+            error=str(exc),
+            error_summary=str(exc),
+            failed_stage="workflow",
+            finished_at=datetime.now().isoformat(),
+        )
         return build_create_response(
             request_id=request_id,
             package=None,
