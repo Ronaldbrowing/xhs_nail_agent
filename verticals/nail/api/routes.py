@@ -16,6 +16,7 @@ from verticals.nail.service.schemas import NailNoteCreateRequest
 from verticals.nail.service.vertical_registry import VerticalRegistry
 from verticals.nail.service.history_service import HistoryService
 from verticals.nail.service.package_service import PackageService
+from verticals.nail.service.case_service import CaseService
 
 from .schemas import HealthResponse, JobCreatedResponse, JobStatusResponse
 
@@ -45,6 +46,10 @@ def _get_history_service() -> HistoryService:
 
 def _get_package_service() -> PackageService:
     return PackageService()
+
+
+def _get_case_service() -> CaseService:
+    return CaseService()
 
 
 # ── /api/verticals ──────────────────────────────────────────────────────────
@@ -107,6 +112,30 @@ def get_note_package(vertical: str, note_id: str):
         raise HTTPException(status_code=400, detail=str(exc))
 
     return JSONResponse(content=package)
+
+
+# ── /api/verticals/{vertical}/cases ─────────────────────────────────────────
+
+
+@router.get("/api/verticals/{vertical}/cases")
+def list_cases(vertical: str):
+    _require_vertical(vertical)
+    svc = _get_case_service()
+    items = svc.list_cases(vertical)
+    return JSONResponse(content={"items": items, "total": len(items), "vertical": vertical})
+
+
+@router.get("/api/verticals/{vertical}/cases/{case_id}")
+def get_case(vertical: str, case_id: str):
+    _require_vertical(vertical)
+    svc = _get_case_service()
+    try:
+        item = svc.get_case(vertical, case_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"case_id not found or has no image: {case_id}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return JSONResponse(content=item)
 
 
 # ── Existing endpoints ────────────────────────────────────────────────────────
