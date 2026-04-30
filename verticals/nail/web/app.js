@@ -99,6 +99,8 @@
   let serverHistoryItems = [];
   let recentLocalJobs = [];
   let activeJobFromLocalStorage = null;
+  let historyLoading = false;
+  let historyError = null;
   let currentVertical = APP_CONFIG.verticals[selectedVertical];
   const form = document.getElementById("note-form");
   const briefField = document.getElementById("brief");
@@ -409,12 +411,24 @@
   function clearResults() {
     noteSummary.innerHTML = "";
     pagesGrid.innerHTML = "";
-    resultEmpty.hidden = false;
+    showResultEmptyState();
     resultMeta.textContent = "生成完成后，这里会展示标题、正文、标签和多页内容结构。";
   }
 
   function showResults() {
-    resultEmpty.hidden = true;
+    hideResultEmptyState();
+  }
+
+  function showResultEmptyState() {
+    if (resultEmpty) {
+      resultEmpty.hidden = false;
+    }
+  }
+
+  function hideResultEmptyState() {
+    if (resultEmpty) {
+      resultEmpty.hidden = true;
+    }
   }
 
   function sanitizePayload(rawPayload) {
@@ -524,6 +538,24 @@
 
     historyPanel.hidden = false;
     historyList.innerHTML = "";
+    if (historyLoading) {
+      historyEmpty.hidden = true;
+      historyList.hidden = true;
+      historyMeta.textContent = "正在从服务端加载历史内容...";
+      return;
+    }
+
+    if (historyError) {
+      historyEmpty.hidden = false;
+      historyList.hidden = true;
+      historyMeta.textContent = "历史内容暂时加载失败，请稍后点击刷新历史重试。";
+      historyEmpty.querySelector("strong").textContent = "历史内容加载失败";
+      historyEmpty.querySelector("p").textContent = "服务端历史暂时不可用，请稍后点击“刷新历史”重试。";
+      return;
+    }
+
+    historyEmpty.querySelector("strong").textContent = "还没有历史内容";
+    historyEmpty.querySelector("p").textContent = "当服务端存在历史 package 时，这里会显示可回放的记录。";
     if (!serverHistoryItems.length) {
       historyEmpty.hidden = false;
       historyList.hidden = true;
@@ -542,22 +574,25 @@
   async function loadServerHistory() {
     if (!selectedVertical) {
       serverHistoryItems = [];
+      historyLoading = false;
+      historyError = null;
       renderServerHistory();
       return;
     }
-    if (historyMeta) {
-      historyMeta.textContent = "正在从服务端加载历史内容...";
-    }
+    historyLoading = true;
+    historyError = null;
+    renderServerHistory();
     try {
       const response = await fetchJson(buildVerticalNotesUrl());
       serverHistoryItems = Array.isArray(response.items) ? response.items : [];
+      historyLoading = false;
+      historyError = null;
       renderServerHistory();
     } catch (error) {
       serverHistoryItems = [];
+      historyLoading = false;
+      historyError = error;
       renderServerHistory();
-      if (historyMeta) {
-        historyMeta.textContent = "历史内容暂时加载失败，请稍后点击刷新历史重试。";
-      }
       setJobMeta({
         note: "history load failed",
         vertical: selectedVertical,
@@ -584,6 +619,7 @@
         status: "history_replay",
         error: null,
       });
+      hideResultEmptyState();
       applyStatus("restored", "已从历史记录回放内容。");
       resultMeta.textContent = "当前正在查看服务端历史内容回放。";
       setJobMeta({
