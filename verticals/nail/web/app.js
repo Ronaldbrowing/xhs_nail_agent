@@ -161,6 +161,7 @@
   let continueQueryPromise = null;
   let currentStatusKey = "idle";
   let activeJobToken = 0;
+  let currentPreviewData = null; // stores packageData for copy actions
 
   function ensureResumeElements() {
     if (!resumePanel || !resumeText || !continueButton || !clearJobButton) {
@@ -309,6 +310,80 @@
       return value.toFixed(1) + " 秒";
     }
     return Math.round(value) + " 秒";
+  }
+
+  function getCopyableText(value) {
+    if (value === undefined || value === null) {
+      return "";
+    }
+    if (typeof value === "string") {
+      return value.trim();
+    }
+    if (Array.isArray(value)) {
+      return value.map(function (v) { return getCopyableText(v); }).filter(function (v) { return v.length > 0; }).join(", ");
+    }
+    if (typeof value === "object") {
+      return JSON.stringify(value);
+    }
+    return String(value);
+  }
+
+  function buildCopyButton(label, dataKey) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "secondary-button copy-action-btn";
+    btn.textContent = label;
+    btn.dataset.copyKey = dataKey;
+    btn.addEventListener("click", handleCopyAction);
+    return btn;
+  }
+
+  function handleCopyAction(event) {
+    const key = event.currentTarget.dataset.copyKey;
+    if (!key || !currentPreviewData) {
+      return;
+    }
+    let text = "";
+    if (key === "title") {
+      text = getCopyableText(currentPreviewData.selected_title);
+    } else if (key === "body") {
+      text = getCopyableText(currentPreviewData.body);
+    } else if (key === "tags") {
+      text = getCopyableText(currentPreviewData.tags);
+    } else if (key === "full") {
+      const title = getCopyableText(currentPreviewData.selected_title);
+      const body = getCopyableText(currentPreviewData.body);
+      const tags = getCopyableText(currentPreviewData.tags);
+      const pages = (currentPreviewData.pages || []).map(function (page) {
+        const roleLabel = labelForRole(page.role);
+        const statusLabel = labelForPageStatus(page.status);
+        return "第 " + page.page_no + " 页 · " + roleLabel + " · " + statusLabel;
+      });
+      const parts = [];
+      if (title) parts.push("标题：" + title);
+      if (body) parts.push("正文：" + body);
+      if (tags) parts.push("标签：" + tags);
+      if (pages.length) parts.push("页面结构：\n" + pages.join("\n"));
+      text = parts.join("\n\n");
+    }
+    if (!text) {
+      return;
+    }
+    navigator.clipboard.writeText(text).then(function () {
+      showCopyFeedback(event.currentTarget);
+    }).catch(function (err) {
+      console.error("copy failed:", err);
+    });
+  }
+
+  function showCopyFeedback(btn) {
+    const original = btn.textContent;
+    btn.textContent = "已复制";
+    btn.disabled = true;
+    setTimeout(function () {
+      btn.textContent = original;
+      btn.disabled = false;
+    }, 1500);
   }
 
   function buildProgressDetail(stateKey, detailText, job) {
@@ -1094,6 +1169,7 @@
   }
 
   function renderPackage(packageData, generateImages, job) {
+    currentPreviewData = packageData;
     clearResults();
     showResults();
     resultMeta.textContent = "已经为你整理出一版可查看的标题、正文、标签和页面结构。";
@@ -1107,6 +1183,14 @@
     noteSummary.appendChild(buildSummaryCard("标题", packageData.selected_title || "—"));
     noteSummary.appendChild(buildSummaryCard("正文", packageData.body || "—"));
     noteSummary.appendChild(buildSummaryCard("标签", buildTagList(packageData.tags || [])));
+
+    const copyActionsBar = document.createElement("div");
+    copyActionsBar.className = "copy-actions-bar";
+    copyActionsBar.appendChild(buildCopyButton("复制标题", "title"));
+    copyActionsBar.appendChild(buildCopyButton("复制正文", "body"));
+    copyActionsBar.appendChild(buildCopyButton("复制标签", "tags"));
+    copyActionsBar.appendChild(buildCopyButton("复制完整内容", "full"));
+    noteSummary.appendChild(copyActionsBar);
 
     setJobMeta(
       buildJobMetaPayload(job, {
