@@ -65,6 +65,11 @@
         title: "生成完成",
         detail: "内容已经准备好，可以开始查看标题、正文和页面结构。",
       },
+      restored: {
+        badge: "已恢复",
+        title: "已从结果包恢复",
+        detail: "上次任务记录已过期，但已根据结果包恢复内容。",
+      },
       failed: {
         badge: "生成失败",
         title: "生成失败",
@@ -252,6 +257,54 @@
     } catch (error) {
       return null;
     }
+  }
+
+  function getRecentJobs() {
+    try {
+      return JSON.parse(localStorage.getItem(RECENT_JOBS_KEY) || "[]");
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function setRecentJobs(jobs) {
+    try {
+      localStorage.setItem(RECENT_JOBS_KEY, JSON.stringify(jobs));
+    } catch (_) {
+      // Ignore storage failures.
+    }
+  }
+
+  function upsertRecentJob(entry) {
+    if (!entry || !entry.jobId) {
+      return;
+    }
+    const jobs = getRecentJobs().filter(function (job) {
+      return job.jobId !== entry.jobId;
+    });
+    const previous = getRecentJobs().find(function (job) {
+      return job.jobId === entry.jobId;
+    }) || {};
+    jobs.unshift(Object.assign({}, previous, entry));
+    if (jobs.length > 10) {
+      jobs.length = 10;
+    }
+    setRecentJobs(jobs);
+  }
+
+  function removeRecentJob(jobId) {
+    const jobs = getRecentJobs().filter(function (job) {
+      return job.jobId !== jobId;
+    });
+    setRecentJobs(jobs);
+  }
+
+  function jobStatusLabel(status) {
+    return (APP_CONFIG.jobStatusMap[status] || APP_CONFIG.jobStatusMap.idle).badge;
+  }
+
+  function generationModeLabel(generateImages) {
+    return generateImages ? "真实图片" : "快速预览";
   }
 
   function showResumePanel(message) {
@@ -511,6 +564,16 @@
       noteId: job.note_id,
       generateImages: generateImages,
     });
+    upsertRecentJob({
+      jobId: job.job_id,
+      noteId: job.note_id,
+      generateImages: generateImages,
+      brief: briefField.value.trim().slice(0, 60),
+      status: statusKey,
+      title: packageData.selected_title || "",
+      updatedAt: new Date().toISOString(),
+    });
+    renderRecentJobs();
     renderPackage(packageData, generateImages, job);
     hideResumePanel();
   }
@@ -557,6 +620,15 @@
         noteId: job.note_id || null,
         generateImages: generateImages,
       });
+      upsertRecentJob({
+        jobId: job.job_id,
+        noteId: job.note_id || null,
+        generateImages: generateImages,
+        brief: briefField.value.trim().slice(0, 60),
+        status: job.status,
+        updatedAt: new Date().toISOString(),
+      });
+      renderRecentJobs();
       if (job.status === "queued") {
         applyStatus("queued", "已提交，等待开始");
       } else if (job.status === "running") {
@@ -659,10 +731,24 @@
             try {
               const packageData = await fetchJson("/api/nail/notes/" + encodeURIComponent(jobContext.noteId) + "/package");
               if (packageData && packageData.pages && packageData.pages.length > 0) {
-                applyStatus("succeeded");
+                applyStatus("restored");
                 resultMeta.textContent = "上次任务记录已过期，但已根据结果包恢复内容。";
-                setJobMeta({ note: "从结果包恢复", job_id: jobContext.jobId });
-                renderPackage(packageData, jobContext.generateImages, { job_id: jobContext.jobId, status: "succeeded", note_id: jobContext.noteId });
+                renderPackage(packageData, jobContext.generateImages, { job_id: jobContext.jobId, status: "restored", note_id: jobContext.noteId, error: null });
+                setJobMeta({
+                  note: "从结果包恢复",
+                  job_id: jobContext.jobId,
+                  note_id: jobContext.noteId,
+                  status: "restored",
+                });
+                upsertRecentJob({
+                  jobId: jobContext.jobId,
+                  noteId: jobContext.noteId,
+                  generateImages: jobContext.generateImages,
+                  status: "restored",
+                  title: packageData.selected_title || "",
+                  updatedAt: new Date().toISOString(),
+                });
+                renderRecentJobs();
                 return;
               }
             } catch (fallbackErr) {
@@ -888,19 +974,8 @@
 
   // --- Recent jobs (localStorage) ---
   const RECENT_JOBS_KEY = "nail_studio_recent_jobs";
-  function getRecentJobs() {
-    try {
-      return JSON.parse(localStorage.getItem(RECENT_JOBS_KEY) || "[]");
-    } catch (_) { return []; }
-  }
-  function setRecentJobs(jobs) {
-    try { localStorage.setItem(RECENT_JOBS_KEY, JSON.stringify(jobs)); } catch (_) {}
-  }
   function addRecentJob(entry) {
-    const jobs = getRecentJobs().filter(function (j) { return j.jobId !== entry.jobId; });
-    jobs.unshift(entry);
-    if (jobs.length > 10) jobs.length = 10;
-    setRecentJobs(jobs);
+    upsertRecentJob(entry);
   }
 
   function renderRecentJobs() {
@@ -913,21 +988,59 @@
     container.hidden = false;
     container.innerHTML = "";
     jobs.forEach(function (job) {
-      const el = document.createElement("button");
-      el.className = "recent-job-item";
-      el.type = "button";
-      el.dataset.jobId = job.jobId;
+      const item = document.createElement("article");
+      item.className = "recent-job-item";
+      item.dataset.jobId = job.jobId;
       const date = job.createdAt ? new Date(job.createdAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
       const brief = job.brief || "";
-      el.innerHTML = "<span class=\"recent-job-id\">" + (job.jobId || "").slice(0, 12) + "...</span><span class=\"recent-job-brief\">" + brief + "</span><span class=\"recent-job-time\">" + date + "</span>";
-      el.addEventListener("click", function () {
+      const status = jobStatusLabel(job.status || "idle");
+      const mode = generationModeLabel(Boolean(job.generateImages));
+
+      const meta = document.createElement("div");
+      meta.className = "recent-job-meta";
+      meta.innerHTML = "<span class=\"recent-job-id\">" + (job.jobId || "").slice(0, 12) + "...</span>"
+        + "<span class=\"recent-job-status\">" + status + "</span>"
+        + "<span class=\"recent-job-mode\">" + mode + "</span>";
+
+      const summary = document.createElement("div");
+      summary.className = "recent-job-summary";
+      summary.innerHTML = "<span class=\"recent-job-brief\">" + brief + "</span>"
+        + "<span class=\"recent-job-time\">" + date + "</span>";
+
+      const actions = document.createElement("div");
+      actions.className = "recent-job-actions";
+
+      const continueJobButton = document.createElement("button");
+      continueJobButton.type = "button";
+      continueJobButton.className = "secondary-button recent-job-open";
+      continueJobButton.textContent = "继续查看";
+      continueJobButton.addEventListener("click", function () {
         const stored = { jobId: job.jobId, noteId: job.noteId, generateImages: job.generateImages };
         setJobMeta({ job_id: job.jobId });
         saveLastJob(stored);
         showResumePanel("发现历史任务，是否继续查看？");
         resultMeta.textContent = "从最近任务列表恢复，可直接继续查询结果。";
       });
-      container.appendChild(el);
+
+      const deleteJobButton = document.createElement("button");
+      deleteJobButton.type = "button";
+      deleteJobButton.className = "ghost-button recent-job-delete";
+      deleteJobButton.textContent = "删除记录";
+      deleteJobButton.addEventListener("click", function () {
+        removeRecentJob(job.jobId);
+        if (currentJobContext && currentJobContext.jobId === job.jobId) {
+          clearLastJob();
+          hideResumePanel();
+        }
+        renderRecentJobs();
+      });
+
+      actions.appendChild(continueJobButton);
+      actions.appendChild(deleteJobButton);
+      item.appendChild(meta);
+      item.appendChild(summary);
+      item.appendChild(actions);
+      container.appendChild(item);
     });
   }
 

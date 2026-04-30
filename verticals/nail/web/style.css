@@ -491,6 +491,11 @@ button:disabled {
   color: #166534;
 }
 
+.status-restored {
+  background: #eef4ff;
+  color: #1d4ed8;
+}
+
 .status-failed,
 .status-partial_failed {
   background: #fde7e7;
@@ -812,19 +817,15 @@ button:disabled {
 .recent-jobs-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 .recent-job-item {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 8px;
-  align-items: center;
-  width: 100%;
-  padding: 8px 12px;
+  gap: 10px;
+  padding: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  cursor: pointer;
+  border-radius: 14px;
   text-align: left;
   font-size: 13px;
   color: var(--text);
@@ -834,20 +835,45 @@ button:disabled {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(183, 110, 121, 0.1);
 }
+.recent-job-meta,
+.recent-job-summary,
+.recent-job-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
 .recent-job-id {
   font-family: monospace;
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
 }
+.recent-job-status,
+.recent-job-mode {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f5f5f4;
+  color: #52525b;
+  border: 1px solid var(--border);
+}
 .recent-job-brief {
   color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 1 1 240px;
 }
 .recent-job-time {
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
+}
+.recent-job-actions {
+  justify-content: flex-end;
+}
+.recent-job-open,
+.recent-job-delete {
+  padding: 8px 12px;
 }

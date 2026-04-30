@@ -56,6 +56,7 @@ class NailFastAPITests(unittest.TestCase):
         self.assertIn("当前内容场景", body)
         self.assertIn("继续查询", body)
         self.assertIn("发现上次任务", body)
+        self.assertIn("最近任务", body)
         self.assertIn("/web/style.css", body)
         self.assertIn("/web/app.js", body)
 
@@ -69,6 +70,10 @@ class NailFastAPITests(unittest.TestCase):
         self.assertIn('console.error("resume-panel element is missing"', js_body)
         self.assertIn("renderPartialFailedJob", js_body)
         self.assertIn("部分完成，但结果包读取失败", js_body)
+        self.assertIn('applyStatus("restored")', js_body)
+        self.assertIn("上次任务记录已过期，但已根据结果包恢复内容。", js_body)
+        self.assertIn("recent-job-delete", js_body)
+        self.assertIn("删除记录", js_body)
 
         css_response = self.client.get("/web/style.css")
         self.assertEqual(css_response.status_code, 200)
@@ -76,6 +81,7 @@ class NailFastAPITests(unittest.TestCase):
         css_body = css_response.text
         self.assertIn(".resume-panel-inline", css_body)
         self.assertIn("background: #fff8f6;", css_body)
+        self.assertIn(".recent-job-delete", css_body)
 
     def test_post_generate_images_false_returns_job_and_package(self):
         response = self.client.post(
