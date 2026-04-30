@@ -365,6 +365,8 @@
       if (tags) parts.push("标签：" + tags);
       if (pages.length) parts.push("页面结构：\n" + pages.join("\n"));
       text = parts.join("\n\n");
+    } else if (key === "markdown") {
+      text = buildMarkdown(currentPreviewData);
     }
     if (!text) {
       return;
@@ -384,6 +386,41 @@
       btn.textContent = original;
       btn.disabled = false;
     }, 1500);
+  }
+
+  function buildMarkdown(packageData) {
+    const lines = [];
+    const title = getCopyableText(packageData.selected_title);
+    const body = getCopyableText(packageData.body);
+    const tags = Array.isArray(packageData.tags)
+      ? packageData.tags.filter(function (t) { return t && typeof t === "string"; })
+      : [];
+
+    if (title) {
+      lines.push("# " + title);
+      lines.push("");
+    }
+    if (body) {
+      lines.push(body);
+      lines.push("");
+    }
+    if (tags.length) {
+      lines.push("## 标签");
+      lines.push("");
+      lines.push(tags.map(function (t) { return "#" + t.trim(); }).join(" "));
+      lines.push("");
+    }
+    const pages = packageData.pages || [];
+    if (pages.length) {
+      lines.push("## 页面结构");
+      lines.push("");
+      pages.forEach(function (page) {
+        const roleLabel = labelForRole(page.role);
+        const statusLabel = labelForPageStatus(page.status);
+        lines.push("### 第 " + page.page_no + " 页 · " + roleLabel + " · " + statusLabel);
+      });
+    }
+    return lines.join("\n");
   }
 
   function buildProgressDetail(stateKey, detailText, job) {
@@ -1190,6 +1227,7 @@
     copyActionsBar.appendChild(buildCopyButton("复制正文", "body"));
     copyActionsBar.appendChild(buildCopyButton("复制标签", "tags"));
     copyActionsBar.appendChild(buildCopyButton("复制完整内容", "full"));
+    copyActionsBar.appendChild(buildCopyButton("复制 Markdown", "markdown"));
     noteSummary.appendChild(copyActionsBar);
 
     setJobMeta(
