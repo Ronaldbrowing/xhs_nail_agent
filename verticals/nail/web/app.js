@@ -94,9 +94,15 @@
     },
   };
 
-  const currentVertical = APP_CONFIG.verticals[APP_CONFIG.currentVertical];
+  let selectedVertical = APP_CONFIG.currentVertical;
+  let availableVerticals = [];
+  let serverHistoryItems = [];
+  let recentLocalJobs = [];
+  let activeJobFromLocalStorage = null;
+  let currentVertical = APP_CONFIG.verticals[selectedVertical];
   const form = document.getElementById("note-form");
   const briefField = document.getElementById("brief");
+  const verticalField = document.getElementById("vertical");
   const styleField = document.getElementById("style_id");
   const styleHelper = document.getElementById("style-helper");
   const skinToneField = document.getElementById("skin_tone");
@@ -114,11 +120,18 @@
   const resultEmpty = document.getElementById("result-empty");
   const noteSummary = document.getElementById("note-summary");
   const pagesGrid = document.getElementById("pages-grid");
+  const currentVerticalBadge = document.getElementById("current-vertical-badge");
   const jobMeta = document.getElementById("job-meta");
   const resumePanel = document.getElementById("resume-panel");
   const resumeText = document.getElementById("resume-text");
   const continueButton = document.getElementById("continue-button");
   const clearJobButton = document.getElementById("clear-job-button");
+  const refreshHistoryButton = document.getElementById("refresh-history-button");
+  const historyPanel = document.getElementById("history-panel");
+  const historyMeta = document.getElementById("history-meta");
+  const historyEmpty = document.getElementById("history-empty");
+  const historyList = document.getElementById("history-list");
+  const recentJobsTitle = document.getElementById("recent-jobs-title");
 
   const STORAGE_KEY = "nail_studio_last_job";
   let currentJobContext = null;
@@ -148,6 +161,47 @@
     });
   }
 
+  function getVerticalDefinition(vertical) {
+    return availableVerticals.find(function (item) {
+      return item && item.vertical === vertical;
+    }) || null;
+  }
+
+  function buildGenericVerticalConfig(verticalDefinition) {
+    const label = verticalDefinition && verticalDefinition.display_name
+      ? verticalDefinition.display_name
+      : (verticalDefinition && verticalDefinition.vertical) || selectedVertical;
+    return {
+      label: label,
+      styleOptions: [
+        {
+          value: "",
+          label: "自动选择模板",
+          description: "当前内容场景暂未提供专用模板，Studio 会先按通用结构整理内容。",
+        },
+      ],
+      skinToneOptions: [
+        { value: "", label: "自动判断" },
+      ],
+      nailLengthOptions: [
+        { value: "", label: "自动判断" },
+      ],
+      roleLabels: {},
+    };
+  }
+
+  function getCurrentVerticalConfig() {
+    return APP_CONFIG.verticals[selectedVertical] || buildGenericVerticalConfig(getVerticalDefinition(selectedVertical));
+  }
+
+  function updateCurrentVerticalState(vertical) {
+    selectedVertical = vertical;
+    currentVertical = getCurrentVerticalConfig();
+    if (currentVerticalBadge) {
+      currentVerticalBadge.textContent = "当前内容场景 · " + currentVertical.label;
+    }
+  }
+
   function updateStyleHelper() {
     const selected = currentVertical.styleOptions.find(function (item) {
       return item.value === styleField.value;
@@ -156,6 +210,7 @@
   }
 
   function initializeFormOptions() {
+    currentVertical = getCurrentVerticalConfig();
     populateSelect(styleField, currentVertical.styleOptions);
     populateSelect(skinToneField, currentVertical.skinToneOptions);
     populateSelect(nailLengthField, currentVertical.nailLengthOptions);
@@ -227,6 +282,7 @@
 
   function saveLastJob(context) {
     currentJobContext = context;
+    activeJobFromLocalStorage = context;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(context));
     } catch (error) {
@@ -236,6 +292,7 @@
 
   function clearLastJob() {
     currentJobContext = null;
+    activeJobFromLocalStorage = null;
     try {
       window.localStorage.removeItem(STORAGE_KEY);
     } catch (error) {
@@ -253,6 +310,7 @@
         return null;
       }
       currentJobContext = JSON.parse(stored);
+      activeJobFromLocalStorage = currentJobContext;
       return currentJobContext;
     } catch (error) {
       return null;
@@ -261,13 +319,17 @@
 
   function getRecentJobs() {
     try {
-      return JSON.parse(localStorage.getItem(RECENT_JOBS_KEY) || "[]");
+      const jobs = JSON.parse(localStorage.getItem(RECENT_JOBS_KEY) || "[]");
+      recentLocalJobs = Array.isArray(jobs) ? jobs : [];
+      return recentLocalJobs;
     } catch (_) {
+      recentLocalJobs = [];
       return [];
     }
   }
 
   function setRecentJobs(jobs) {
+    recentLocalJobs = jobs;
     try {
       localStorage.setItem(RECENT_JOBS_KEY, JSON.stringify(jobs));
     } catch (_) {
@@ -368,6 +430,180 @@
       payload[key] = value;
     });
     return payload;
+  }
+
+  async function loadVerticalOptions() {
+    const response = await fetchJson("/api/verticals");
+    const verticals = Array.isArray(response.verticals) ? response.verticals.filter(function (item) {
+      return item && item.enabled;
+    }) : [];
+    availableVerticals = verticals;
+
+    if (verticalField) {
+      verticalField.innerHTML = "";
+      verticals.forEach(function (item) {
+        const option = document.createElement("option");
+        option.value = item.vertical;
+        option.textContent = item.display_name || item.vertical;
+        verticalField.appendChild(option);
+      });
+    }
+
+    const hasDefaultVertical = verticals.some(function (item) {
+      return item.vertical === APP_CONFIG.currentVertical;
+    });
+    const fallbackVertical = verticals.length > 0 ? verticals[0].vertical : APP_CONFIG.currentVertical;
+    updateCurrentVerticalState(hasDefaultVertical ? APP_CONFIG.currentVertical : fallbackVertical);
+    if (verticalField) {
+      verticalField.value = selectedVertical;
+    }
+    initializeFormOptions();
+  }
+
+  function buildHistoryItem(item) {
+    const article = document.createElement("article");
+    article.className = "recent-job-item";
+    article.dataset.noteId = item.note_id;
+
+    const meta = document.createElement("div");
+    meta.className = "recent-job-meta";
+
+    const noteIdLabel = document.createElement("span");
+    noteIdLabel.className = "recent-job-id";
+    noteIdLabel.textContent = (item.note_id || "unknown").slice(0, 18) + "...";
+    meta.appendChild(noteIdLabel);
+
+    const statusLabel = document.createElement("span");
+    statusLabel.className = "recent-job-status";
+    statusLabel.textContent = jobStatusLabel(item.status || "idle");
+    meta.appendChild(statusLabel);
+
+    const modeLabel = document.createElement("span");
+    modeLabel.className = "recent-job-mode";
+    modeLabel.textContent = item.has_package ? "可回放" : "无结果包";
+    meta.appendChild(modeLabel);
+
+    const summary = document.createElement("div");
+    summary.className = "recent-job-summary";
+
+    const title = document.createElement("span");
+    title.className = "recent-job-brief";
+    title.textContent = item.selected_title || item.brief || item.note_id || "未命名内容";
+    summary.appendChild(title);
+
+    const time = document.createElement("span");
+    time.className = "recent-job-time";
+    time.textContent = item.created_at
+      ? new Date(item.created_at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
+      : "时间未知";
+    summary.appendChild(time);
+
+    const actions = document.createElement("div");
+    actions.className = "recent-job-actions";
+
+    const openButton = document.createElement("button");
+    openButton.type = "button";
+    openButton.className = "secondary-button recent-job-open";
+    openButton.textContent = "回放预览";
+    openButton.disabled = !item.note_id;
+    openButton.addEventListener("click", function () {
+      replayHistoryItem(item);
+    });
+
+    actions.appendChild(openButton);
+    article.appendChild(meta);
+    article.appendChild(summary);
+    article.appendChild(actions);
+    return article;
+  }
+
+  function renderServerHistory() {
+    if (!historyPanel || !historyList || !historyEmpty || !historyMeta) {
+      return;
+    }
+
+    historyPanel.hidden = false;
+    historyList.innerHTML = "";
+    if (!serverHistoryItems.length) {
+      historyEmpty.hidden = false;
+      historyList.hidden = true;
+      historyMeta.textContent = "这里显示服务端历史内容，点击后会回放到下方内容预览区。";
+      return;
+    }
+
+    historyEmpty.hidden = true;
+    historyList.hidden = false;
+    historyMeta.textContent = "历史内容来自服务端接口，可直接回放到右侧内容预览区。";
+    serverHistoryItems.forEach(function (item) {
+      historyList.appendChild(buildHistoryItem(item));
+    });
+  }
+
+  async function loadServerHistory() {
+    if (!selectedVertical) {
+      serverHistoryItems = [];
+      renderServerHistory();
+      return;
+    }
+    if (historyMeta) {
+      historyMeta.textContent = "正在从服务端加载历史内容...";
+    }
+    try {
+      const response = await fetchJson(buildVerticalNotesUrl());
+      serverHistoryItems = Array.isArray(response.items) ? response.items : [];
+      renderServerHistory();
+    } catch (error) {
+      serverHistoryItems = [];
+      renderServerHistory();
+      if (historyMeta) {
+        historyMeta.textContent = "历史内容暂时加载失败，请稍后点击刷新历史重试。";
+      }
+      setJobMeta({
+        note: "history load failed",
+        vertical: selectedVertical,
+        status: error.status || null,
+        url: error.url || null,
+        error: formatError(error),
+      });
+    }
+  }
+
+  async function replayHistoryItem(item) {
+    if (!item || !item.note_id || !selectedVertical) {
+      return;
+    }
+    applyStatus("running", "正在加载历史结果包");
+    try {
+      const packageData = await fetchJson(buildVerticalPackageUrl(item.note_id));
+      const generateImages = Array.isArray(packageData.pages) && packageData.pages.some(function (page) {
+        return Boolean(normalizeOutputImagePath(page.image_path));
+      });
+      renderPackage(packageData, generateImages, {
+        job_id: item.job_id || null,
+        note_id: item.note_id,
+        status: "history_replay",
+        error: null,
+      });
+      applyStatus("restored", "已从历史记录回放内容。");
+      resultMeta.textContent = "当前正在查看服务端历史内容回放。";
+      setJobMeta({
+        note: "history replay",
+        vertical: selectedVertical,
+        note_id: item.note_id,
+        generate_images: generateImages,
+      });
+    } catch (error) {
+      applyStatus("failed", "历史内容加载失败");
+      resultMeta.textContent = "这条历史内容暂时无法回放，请稍后刷新历史后重试。";
+      setJobMeta({
+        note: "history replay failed",
+        vertical: selectedVertical,
+        note_id: item.note_id,
+        status: error.status || null,
+        url: error.url || null,
+        error: formatError(error),
+      });
+    }
   }
 
   function normalizeOutputImagePath(imagePath) {
@@ -534,6 +770,14 @@
     }
   }
 
+  function buildVerticalNotesUrl() {
+    return "/api/verticals/" + encodeURIComponent(selectedVertical) + "/notes";
+  }
+
+  function buildVerticalPackageUrl(noteId) {
+    return buildVerticalNotesUrl() + "/" + encodeURIComponent(noteId) + "/package";
+  }
+
   async function fetchJson(url, options) {
     const response = await fetch(url, options);
     let payload = null;
@@ -558,7 +802,7 @@
     }
 
     applyStatus(statusKey, detailText);
-    const packageData = await fetchJson("/api/nail/notes/" + encodeURIComponent(job.note_id) + "/package");
+    const packageData = await fetchJson(buildVerticalPackageUrl(job.note_id));
     saveLastJob({
       jobId: job.job_id,
       noteId: job.note_id,
@@ -729,7 +973,7 @@
           // Fallback: jobStore lost but noteId may still have package on disk
           if (jobContext.noteId) {
             try {
-              const packageData = await fetchJson("/api/nail/notes/" + encodeURIComponent(jobContext.noteId) + "/package");
+              const packageData = await fetchJson(buildVerticalPackageUrl(jobContext.noteId));
               if (packageData && packageData.pages && packageData.pages.length > 0) {
                 applyStatus("restored");
                 resultMeta.textContent = "上次任务记录已过期，但已根据结果包恢复内容。";
@@ -790,7 +1034,24 @@
     }
   });
 
+  if (verticalField) {
+    verticalField.addEventListener("change", async function () {
+      const nextVertical = verticalField.value;
+      if (!nextVertical || nextVertical === selectedVertical) {
+        return;
+      }
+      updateCurrentVerticalState(nextVertical);
+      initializeFormOptions();
+      await loadServerHistory();
+    });
+  }
+
   styleField.addEventListener("change", updateStyleHelper);
+  if (refreshHistoryButton) {
+    refreshHistoryButton.addEventListener("click", async function () {
+      await loadServerHistory();
+    });
+  }
   continueButton.addEventListener("click", function () {
     const storedJob = loadLastJob();
     if (!storedJob) {
@@ -1068,16 +1329,34 @@
     renderRecentJobs();
   }
 
-  initializeFormOptions();
-  clearResults();
-  applyStatus("idle");
-  loadRecentJobs();
-  const storedJob = loadLastJob();
-  if (storedJob && storedJob.jobId) {
-    setJobMeta(storedJob);
-    showResumePanel("发现上次任务，是否继续查看？");
-    resultMeta.textContent = "如果你上次的任务已经跑完，可以直接继续查询并恢复内容预览。";
+  async function initializeApp() {
+    initializeFormOptions();
+    clearResults();
+    applyStatus("idle");
+    if (recentJobsTitle) {
+      recentJobsTitle.textContent = "最近任务快捷入口";
+    }
+    loadRecentJobs();
+    const storedJob = loadLastJob();
+    if (storedJob && storedJob.jobId) {
+      setJobMeta(storedJob);
+      showResumePanel("发现上次任务，是否继续查看？");
+      resultMeta.textContent = "如果你上次的任务已经跑完，可以直接继续查询并恢复内容预览。";
+    }
+    try {
+      await loadVerticalOptions();
+      await loadServerHistory();
+    } catch (error) {
+      setJobMeta({
+        note: "vertical bootstrap failed",
+        status: error.status || null,
+        url: error.url || null,
+        error: formatError(error),
+      });
+    }
   }
+
+  initializeApp();
 
   window.__nailStudioDebug = function () {
     return {

@@ -16,7 +16,7 @@
           <p class="hero-subtitle">输入一个内容需求，生成适合发布的标题、正文、标签和多页内容结构</p>
         </div>
         <div class="hero-badges">
-          <span class="hero-badge">当前内容场景 · 小红书美甲图文</span>
+          <span id="current-vertical-badge" class="hero-badge">当前内容场景 · 小红书美甲图文</span>
           <span class="hero-badge hero-badge-soft">快速预览 · 不消耗图片额度</span>
         </div>
       </header>
@@ -41,7 +41,7 @@
             </div>
 
             <div id="recent-jobs-panel" class="recent-jobs-panel" hidden>
-              <p class="recent-jobs-title">最近任务</p>
+              <p id="recent-jobs-title" class="recent-jobs-title">最近任务快捷入口</p>
               <div id="recent-jobs-list" class="recent-jobs-list" hidden></div>
             </div>
 
@@ -62,7 +62,7 @@
 
             <label class="field">
               <span>内容场景</span>
-              <select id="vertical" name="vertical" disabled>
+              <select id="vertical" name="vertical">
                 <option value="nail">小红书美甲图文</option>
               </select>
             </label>
@@ -165,6 +165,22 @@
             <summary>开发信息</summary>
             <pre id="job-meta" class="code-block">任务开始后，这里会显示任务编号和技术信息。</pre>
           </details>
+
+          <section id="history-panel" class="recent-jobs-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">History</p>
+                <h2>历史内容</h2>
+              </div>
+              <button id="refresh-history-button" type="button" class="ghost-button">刷新历史</button>
+            </div>
+            <p id="history-meta" class="section-tip">这里显示服务端历史内容，点击后会回放到下方内容预览区。</p>
+            <div id="history-empty" class="empty-state">
+              <strong>还没有历史内容</strong>
+              <p>当服务端存在历史 package 时，这里会显示可回放的记录。</p>
+            </div>
+            <div id="history-list" class="recent-jobs-list" hidden></div>
+          </section>
 
           <section id="result-section" class="result-section">
             <div class="section-head">
