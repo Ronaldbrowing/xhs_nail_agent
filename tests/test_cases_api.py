@@ -68,6 +68,7 @@ class TestCasesApi:
             assert data["vertical"] == "nail"
             assert data["total"] == 1
             assert data["items"][0]["case_id"] == "case_038"
+            assert data["items"][0]["preview_url"] == "/api/verticals/nail/cases/case_038/preview-image"
 
     def test_get_case_returns_detail(self, client, fake_case_root):
         svc = CaseService(case_root=fake_case_root)
@@ -80,6 +81,21 @@ class TestCasesApi:
             assert data["case_id"] == "case_038"
             assert data["vertical"] == "nail"
             assert data["image_path"].startswith("case_library/poster/")
+            assert data["preview_url"] == "/api/verticals/nail/cases/case_038/preview-image"
+
+    def test_preview_image_returns_file_response(self, client, fake_case_root):
+        svc = CaseService(case_root=fake_case_root)
+        from unittest.mock import patch
+
+        with patch("verticals.nail.api.routes._get_case_service", return_value=svc):
+            resp = client.get("/api/verticals/nail/cases/case_038/preview-image")
+            assert resp.status_code == 200
+            assert resp.content == b"png"
+
+    def test_preview_image_unknown_vertical_returns_400(self, client):
+        resp = client.get("/api/verticals/unknown_vertical/cases/case_038/preview-image")
+        assert resp.status_code == 400
+        assert "unknown vertical" in resp.json()["detail"].lower()
 
     def test_unknown_vertical_returns_400(self, client):
         resp = client.get("/api/verticals/unknown_vertical/cases")
@@ -92,6 +108,25 @@ class TestCasesApi:
 
         with patch("verticals.nail.api.routes._get_case_service", return_value=svc):
             resp = client.get("/api/verticals/nail/cases/case_404")
+            assert resp.status_code == 404
+
+    def test_preview_image_unknown_case_returns_404(self, client, fake_case_root):
+        svc = CaseService(case_root=fake_case_root)
+        from unittest.mock import patch
+
+        with patch("verticals.nail.api.routes._get_case_service", return_value=svc):
+            resp = client.get("/api/verticals/nail/cases/case_404/preview-image")
+            assert resp.status_code == 404
+
+    def test_preview_image_case_without_image_returns_404(self, client, fake_case_root):
+        svc = CaseService(case_root=fake_case_root)
+        from unittest.mock import patch
+
+        case_dir = fake_case_root / "poster" / "case_038_summer_blue"
+        (case_dir / "image.png").unlink()
+
+        with patch("verticals.nail.api.routes._get_case_service", return_value=svc):
+            resp = client.get("/api/verticals/nail/cases/case_038/preview-image")
             assert resp.status_code == 404
 
     def test_case_lookup_respects_vertical_scope(self, client, fake_case_root):

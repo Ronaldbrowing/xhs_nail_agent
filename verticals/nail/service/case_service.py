@@ -101,7 +101,20 @@ class CaseService:
             "created_at": metadata.get("created_at"),
             "image_path": relative_image_path,
             "has_image": bool(image_path),
+            "preview_url": self.build_preview_url(vertical, case_id) if image_path else None,
         }
+
+    def build_preview_url(self, vertical: str, case_id: str) -> str:
+        self._task_for_vertical(vertical)
+        self._validate_case_id(case_id)
+        return f"/api/verticals/{vertical}/cases/{case_id}/preview-image"
+
+    def get_case_image_path(self, vertical: str, case_id: str) -> Path:
+        case_dir = self._find_case_dir(vertical, case_id)
+        image_path = self._find_image(case_dir)
+        if not image_path or not image_path.exists():
+            raise FileNotFoundError(f"case_id not found or has no image: {case_id}")
+        return image_path.resolve()
 
     def list_cases(self, vertical: str) -> List[Dict[str, Any]]:
         task_dir = self._task_dir(vertical)

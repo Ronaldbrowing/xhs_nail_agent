@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from project_paths import OUTPUT_DIR, INPUT_DIR, PROJECT_ROOT, resolve_project_path
 from verticals.nail.service.job_store import create_job, find_job_by_note_id, get_job
@@ -136,6 +136,19 @@ def get_case(vertical: str, case_id: str):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return JSONResponse(content=item)
+
+
+@router.get("/api/verticals/{vertical}/cases/{case_id}/preview-image")
+def get_case_preview_image(vertical: str, case_id: str):
+    _require_vertical(vertical)
+    svc = _get_case_service()
+    try:
+        image_path = svc.get_case_image_path(vertical, case_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"case_id not found or has no image: {case_id}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return FileResponse(image_path)
 
 
 # ── Existing endpoints ────────────────────────────────────────────────────────

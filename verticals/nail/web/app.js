@@ -145,6 +145,7 @@
   const selectedCasePanel = document.getElementById("selected-case-panel");
   const selectedCaseText = document.getElementById("selected-case-text");
   const clearCaseButton = document.getElementById("clear-case-button");
+  const caseIdField = document.getElementById("case_id");
 
   const STORAGE_KEY = "nail_studio_last_job";
   let currentJobContext = null;
@@ -490,7 +491,11 @@
   }
 
   function buildCasePreviewUrl(item) {
-    if (item && typeof item.preview_url === "string" && item.preview_url.startsWith("/static/")) {
+    if (
+      item &&
+      typeof item.preview_url === "string" &&
+      (item.preview_url.startsWith("/static/") || item.preview_url.startsWith("/api/verticals/"))
+    ) {
       return item.preview_url;
     }
     if (!item || typeof item.image_path !== "string") {
@@ -1527,9 +1532,6 @@
       await uploadReferenceFile(file);
     });
   }
-
-  // --- Case ID ---
-  const caseIdField = document.getElementById("case_id");
 
   // --- Recent jobs (localStorage) ---
   const RECENT_JOBS_KEY = "nail_studio_recent_jobs";

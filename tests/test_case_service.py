@@ -70,6 +70,13 @@ class TestCaseService:
         assert item["case_id"] == "case_038"
         assert item["brief"] == "夏日蓝色猫眼"
         assert item["image_path"].startswith("case_library/poster/case_038_summer_blue/")
+        assert item["preview_url"] == "/api/verticals/nail/cases/case_038/preview-image"
+
+    def test_get_case_image_path_returns_resolved_image(self, fake_case_root):
+        svc = CaseService(case_root=fake_case_root)
+        image_path = svc.get_case_image_path("nail", "case_038")
+        assert image_path.name == "image.png"
+        assert image_path.exists()
 
     def test_unknown_case_id_raises_file_not_found(self, fake_case_root):
         svc = CaseService(case_root=fake_case_root)
@@ -101,3 +108,10 @@ class TestCaseService:
         items = svc.list_cases("nail")
         case_ids = [item["case_id"] for item in items]
         assert "case_999" not in case_ids
+
+    def test_get_case_image_path_requires_existing_image(self, fake_case_root):
+        svc = CaseService(case_root=fake_case_root)
+        case_dir = fake_case_root / "poster" / "case_038_summer_blue"
+        (case_dir / "image.png").unlink()
+        with pytest.raises(FileNotFoundError):
+            svc.get_case_image_path("nail", "case_038")
