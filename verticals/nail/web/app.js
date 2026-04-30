@@ -97,10 +97,14 @@
   let selectedVertical = APP_CONFIG.currentVertical;
   let availableVerticals = [];
   let serverHistoryItems = [];
+  let caseLibraryItems = [];
   let recentLocalJobs = [];
   let activeJobFromLocalStorage = null;
   let historyLoading = false;
   let historyError = null;
+  let caseLibraryLoading = false;
+  let caseLibraryError = null;
+  let selectedCase = null;
   let currentVertical = APP_CONFIG.verticals[selectedVertical];
   const form = document.getElementById("note-form");
   const briefField = document.getElementById("brief");
@@ -134,6 +138,13 @@
   const historyEmpty = document.getElementById("history-empty");
   const historyList = document.getElementById("history-list");
   const recentJobsTitle = document.getElementById("recent-jobs-title");
+  const caseLibraryPanel = document.getElementById("case-library-panel");
+  const caseLibraryMeta = document.getElementById("case-library-meta");
+  const caseLibraryEmpty = document.getElementById("case-library-empty");
+  const caseLibraryList = document.getElementById("case-library-list");
+  const selectedCasePanel = document.getElementById("selected-case-panel");
+  const selectedCaseText = document.getElementById("selected-case-text");
+  const clearCaseButton = document.getElementById("clear-case-button");
 
   const STORAGE_KEY = "nail_studio_last_job";
   let currentJobContext = null;
@@ -472,6 +483,204 @@
       verticalField.value = selectedVertical;
     }
     initializeFormOptions();
+  }
+
+  function buildVerticalCasesUrl() {
+    return "/api/verticals/" + encodeURIComponent(selectedVertical) + "/cases";
+  }
+
+  function buildCasePreviewUrl(item) {
+    if (item && typeof item.preview_url === "string" && item.preview_url.startsWith("/static/")) {
+      return item.preview_url;
+    }
+    if (!item || typeof item.image_path !== "string") {
+      return null;
+    }
+    if (!item.image_path.startsWith("case_library/")) {
+      return null;
+    }
+    if (item.image_path.indexOf("..") !== -1 || item.image_path.startsWith("/") || item.image_path.indexOf(":") !== -1) {
+      return null;
+    }
+    return null;
+  }
+
+  function syncCaseInputWithSelection(item) {
+    if (!caseIdField) {
+      return;
+    }
+    caseIdField.value = item && item.case_id ? item.case_id : "";
+  }
+
+  function renderSelectedCasePanel() {
+    if (!selectedCasePanel || !selectedCaseText) {
+      return;
+    }
+    if (!selectedCase) {
+      selectedCasePanel.hidden = true;
+      return;
+    }
+    const label = selectedCase.title || selectedCase.case_id || "已选案例";
+    const secondary = selectedCase.case_id && selectedCase.case_id !== label ? " · " + selectedCase.case_id : "";
+    selectedCaseText.textContent = "已选择案例：" + label + secondary;
+    selectedCasePanel.hidden = false;
+  }
+
+  function clearCaseSelection(options) {
+    const settings = options || {};
+    selectedCase = null;
+    if (!settings.preserveInput) {
+      syncCaseInputWithSelection(null);
+    }
+    renderSelectedCasePanel();
+    renderCaseLibrary();
+  }
+
+  function selectCase(item) {
+    selectedCase = item || null;
+    syncCaseInputWithSelection(item);
+    renderSelectedCasePanel();
+    if (currentReferenceImage) {
+      clearReferenceImage({ preserveCaseSelection: true });
+    }
+    renderCaseLibrary();
+  }
+
+  function buildCaseLibraryItem(item) {
+    const article = document.createElement("article");
+    article.className = "recent-job-item";
+    article.dataset.caseId = item.case_id || "";
+
+    const meta = document.createElement("div");
+    meta.className = "recent-job-meta";
+
+    const caseIdLabel = document.createElement("span");
+    caseIdLabel.className = "recent-job-id";
+    caseIdLabel.textContent = item.case_id || "case";
+    meta.appendChild(caseIdLabel);
+
+    const taskLabel = document.createElement("span");
+    taskLabel.className = "recent-job-status";
+    taskLabel.textContent = item.task || selectedVertical;
+    meta.appendChild(taskLabel);
+
+    const imageLabel = document.createElement("span");
+    imageLabel.className = "recent-job-mode";
+    imageLabel.textContent = item.has_image ? "含参考图" : "无图片";
+    meta.appendChild(imageLabel);
+
+    const summary = document.createElement("div");
+    summary.className = "recent-job-summary";
+
+    const title = document.createElement("span");
+    title.className = "recent-job-brief";
+    title.textContent = item.title || item.case_id || "未命名案例";
+    summary.appendChild(title);
+
+    const brief = document.createElement("span");
+    brief.className = "recent-job-time";
+    brief.textContent = item.brief || "可复用当前案例的风格方向。";
+    summary.appendChild(brief);
+
+    const actions = document.createElement("div");
+    actions.className = "recent-job-actions";
+
+    const chooseButton = document.createElement("button");
+    chooseButton.type = "button";
+    chooseButton.className = "secondary-button recent-job-open";
+    chooseButton.textContent = selectedCase && selectedCase.case_id === item.case_id ? "已选中" : "使用案例";
+    chooseButton.disabled = selectedCase && selectedCase.case_id === item.case_id;
+    chooseButton.addEventListener("click", function () {
+      selectCase(item);
+    });
+    actions.appendChild(chooseButton);
+
+    const imageUrl = buildCasePreviewUrl(item);
+    if (imageUrl) {
+      const image = document.createElement("img");
+      image.className = "page-image";
+      image.src = imageUrl;
+      image.alt = item.title || item.case_id || "案例预览";
+      article.appendChild(image);
+    }
+
+    article.appendChild(meta);
+    article.appendChild(summary);
+    article.appendChild(actions);
+    return article;
+  }
+
+  function renderCaseLibrary() {
+    if (!caseLibraryPanel || !caseLibraryEmpty || !caseLibraryList || !caseLibraryMeta) {
+      return;
+    }
+
+    caseLibraryPanel.hidden = false;
+    caseLibraryList.innerHTML = "";
+
+    if (caseLibraryLoading) {
+      caseLibraryEmpty.hidden = true;
+      caseLibraryList.hidden = true;
+      caseLibraryMeta.textContent = "正在加载当前内容场景的案例库...";
+      return;
+    }
+
+    if (caseLibraryError) {
+      caseLibraryEmpty.hidden = false;
+      caseLibraryList.hidden = true;
+      caseLibraryMeta.textContent = "案例库暂时加载失败。";
+      caseLibraryEmpty.querySelector("strong").textContent = "案例库加载失败";
+      caseLibraryEmpty.querySelector("p").textContent = "你仍然可以直接填写 case_id，或改用本地参考图继续生成。";
+      return;
+    }
+
+    caseLibraryEmpty.querySelector("strong").textContent = "还没有可用案例";
+    caseLibraryEmpty.querySelector("p").textContent = "当当前内容场景存在可复用案例时，这里会显示可直接选择的案例卡片。";
+    if (!caseLibraryItems.length) {
+      caseLibraryEmpty.hidden = false;
+      caseLibraryList.hidden = true;
+      caseLibraryMeta.textContent = "当前内容场景暂时没有可选案例。";
+      return;
+    }
+
+    caseLibraryEmpty.hidden = true;
+    caseLibraryList.hidden = false;
+    caseLibraryMeta.textContent = "选择案例后，Studio 会以案例风格方向继续生成。";
+    caseLibraryItems.forEach(function (item) {
+      caseLibraryList.appendChild(buildCaseLibraryItem(item));
+    });
+  }
+
+  async function loadCaseLibrary() {
+    if (!selectedVertical) {
+      caseLibraryItems = [];
+      caseLibraryLoading = false;
+      caseLibraryError = null;
+      renderCaseLibrary();
+      return;
+    }
+    caseLibraryLoading = true;
+    caseLibraryError = null;
+    renderCaseLibrary();
+    try {
+      const response = await fetchJson(buildVerticalCasesUrl());
+      caseLibraryItems = Array.isArray(response.items) ? response.items : [];
+      caseLibraryLoading = false;
+      caseLibraryError = null;
+      renderCaseLibrary();
+    } catch (error) {
+      caseLibraryItems = [];
+      caseLibraryLoading = false;
+      caseLibraryError = error;
+      renderCaseLibrary();
+      setJobMeta({
+        note: "case library load failed",
+        vertical: selectedVertical,
+        status: error.status || null,
+        url: error.url || null,
+        error: formatError(error),
+      });
+    }
   }
 
   function buildHistoryItem(item) {
@@ -1078,7 +1287,35 @@
       }
       updateCurrentVerticalState(nextVertical);
       initializeFormOptions();
+      clearCaseSelection();
+      clearReferenceImage({ preserveCaseSelection: true });
+      await loadCaseLibrary();
       await loadServerHistory();
+    });
+  }
+
+  if (caseIdField) {
+    caseIdField.addEventListener("input", function () {
+      const typed = caseIdField.value.trim();
+      if (!typed) {
+        clearCaseSelection({ preserveInput: true });
+        return;
+      }
+      if (selectedCase && selectedCase.case_id === typed) {
+        return;
+      }
+      selectedCase = null;
+      renderSelectedCasePanel();
+      renderCaseLibrary();
+      if (currentReferenceImage) {
+        clearReferenceImage({ preserveCaseSelection: true });
+      }
+    });
+  }
+
+  if (clearCaseButton) {
+    clearCaseButton.addEventListener("click", function () {
+      clearCaseSelection();
     });
   }
 
@@ -1112,6 +1349,18 @@
 
     const generateImages = enableImagesField.checked;
     const caseIdValue = caseIdField && caseIdField.value ? caseIdField.value.trim() : "";
+    let referenceSource = "none";
+    let referenceImagePath;
+    let effectiveCaseId;
+
+    if (caseIdValue) {
+      referenceSource = "case_id";
+      effectiveCaseId = caseIdValue;
+    } else if (currentReferenceImage && currentReferenceImage.path) {
+      referenceSource = "local_path";
+      referenceImagePath = currentReferenceImage.path;
+    }
+
     const payload = sanitizePayload({
       brief: briefField.value,
       style_id: styleField.value,
@@ -1119,8 +1368,9 @@
       nail_length: nailLengthField.value,
       generate_images: generateImages,
       max_workers: Number(maxWorkersField.value || "1"),
-      reference_image_path: currentReferenceImage ? currentReferenceImage.path : undefined,
-      case_id: caseIdValue || undefined,
+      reference_source: referenceSource,
+      reference_image_path: referenceImagePath,
+      case_id: effectiveCaseId,
     });
 
     try {
@@ -1201,12 +1451,16 @@
     refPreviewImg.src = previewUrl;
   }
 
-  function clearReferenceImage() {
+  function clearReferenceImage(options) {
+    const settings = options || {};
     currentReferenceImage = null;
     refPreview.hidden = true;
     refPlaceholder.hidden = false;
     refPreviewImg.src = "";
     if (refInput) refInput.value = "";
+    if (!settings.preserveCaseSelection) {
+      renderCaseLibrary();
+    }
   }
 
   if (refRemoveBtn) {
@@ -1256,6 +1510,9 @@
         path: data.reference_image_path,
         previewUrl: data.preview_url,
       };
+      if (selectedCase || (caseIdField && caseIdField.value.trim())) {
+        clearCaseSelection();
+      }
       showReferencePreview(data.preview_url);
     } catch (err) {
       alert("上传失败：" + formatError(err));
@@ -1381,6 +1638,7 @@
     }
     try {
       await loadVerticalOptions();
+      await loadCaseLibrary();
       await loadServerHistory();
     } catch (error) {
       setJobMeta({

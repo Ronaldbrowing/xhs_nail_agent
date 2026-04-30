@@ -64,6 +64,7 @@ class NailFastAPITests(unittest.TestCase):
         self.assertIn("继续查询", body)
         self.assertIn("发现上次任务", body)
         self.assertIn("最近任务", body)
+        self.assertIn("案例库", body)
         self.assertIn("/web/style.css", body)
         self.assertIn("/web/app.js", body)
 
@@ -79,6 +80,10 @@ class NailFastAPITests(unittest.TestCase):
         self.assertIn("部分完成，但结果包读取失败", js_body)
         self.assertIn('applyStatus("restored")', js_body)
         self.assertIn("/api/nail/assets/reference-image", js_body)
+        self.assertIn("/api/verticals/", js_body)
+        self.assertIn("/cases", js_body)
+        self.assertIn("reference_source", js_body)
+        self.assertIn("loadCaseLibrary", js_body)
         self.assertIn("case_id", js_body)
         self.assertIn("上次任务记录已过期，但已根据结果包恢复内容。", js_body)
         self.assertIn("recent-job-delete", js_body)
