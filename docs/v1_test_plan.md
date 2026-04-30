@@ -1,6 +1,6 @@
 # Vertical Content Studio MVP v1.0 测试计划
 
-- **来源文档**：docs/v1.md
+- **来源文档**：docs/vertical_content_studio_mvp_v1_requirements.md
 - **生成日期**：2026-04-30
 - **当前阶段**：Milestone 0
 - **状态说明**：本文件是从 v1.md 派生的测试计划，不替代 v1.md。
@@ -185,7 +185,7 @@
 ### Milestone 0：需求冻结与基线确认
 
 **准入条件**：
-- docs/v1.md 已定稿
+- docs/vertical_content_studio_mvp_v1_requirements.md 已定稿
 - 所有 FR 已编号并进入验收矩阵
 - 每个 FR 有测试或手动验收方式
 - v0 差距已扫描
@@ -348,4 +348,4 @@ python3 -m py_compile project_paths.py verticals/nail/api/app.py verticals/nail/
 
 | 日期 | 更新人 | 更新内容 |
 |---|---|---|
-| 2026-04-30 | Codex/Hermes | 初始创建，基于 docs/v1.md 测试方案 |
+| 2026-04-30 | Codex/Hermes | 初始创建，基于 docs/vertical_content_studio_mvp_v1_requirements.md 测试方案 |

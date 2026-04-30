@@ -1,6 +1,6 @@
 # 技术债务清单
 
-- **来源文档**：docs/v1.md
+- **来源文档**：docs/vertical_content_studio_mvp_v1_requirements.md
 - **生成日期**：2026-04-30
 - **当前阶段**：Milestone 0
 - **状态说明**：本文档记录 v1.0 开发过程中发现和积累的技术债务

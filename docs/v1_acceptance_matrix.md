@@ -1,13 +1,13 @@
 # Vertical Content Studio MVP v1.0 验收矩阵
 
-- **来源文档**：docs/v1.md
+- **来源文档**：docs/vertical_content_studio_mvp_v1_requirements.md
 - **生成日期**：2026-04-30
 - **当前阶段**：Milestone 0
 - **状态说明**：本文件是从 v1.md 派生的执行跟踪矩阵，不替代 v1.md。
 
 ## 概述
 
-本文档记录 MVP v1.0 所有功能需求（FR）的验收状态。FR 编号严格对应 docs/v1.md 中定义的编号（FR-000 至 FR-018）。
+本文档记录 MVP v1.0 所有功能需求（FR）的验收状态。FR 编号严格对应 docs/vertical_content_studio_mvp_v1_requirements.md 中定义的编号（FR-000 至 FR-018）。
 
 ---
 
@@ -80,7 +80,7 @@
 
 | 日期 | 更新人 | 更新内容 |
 |---|---|---|
-| 2026-04-30 | Codex/Hermes | 初始创建，基于 docs/v1.md FR 定义 |
+| 2026-04-30 | Codex/Hermes | 初始创建，基于 docs/vertical_content_studio_mvp_v1_requirements.md FR 定义 |
 
 ---
 

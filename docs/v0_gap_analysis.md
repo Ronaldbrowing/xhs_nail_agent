@@ -1,6 +1,6 @@
 # Web MVP v0 与 Vertical Content Studio MVP v1.0 差距分析
 
-- **来源文档**：docs/v1.md
+- **来源文档**：docs/vertical_content_studio_mvp_v1_requirements.md
 - **生成日期**：2026-04-30
 - **当前阶段**：Milestone 0
 - **扫描范围**：verticals/nail/, tests/, src/, project_paths.py, output/
