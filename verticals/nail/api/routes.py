@@ -197,14 +197,7 @@ IMAGE_TYPE_SUFFIXES = {
 }
 
 
-@router.post("/api/nail/assets/reference-image")
-async def upload_reference_image(file: UploadFile = File(...)):
-    """
-    Upload a reference image for image-to-image generation.
-
-    Allowed types: png, jpg, jpeg, webp. Max size: 10MB.
-    Returns a safe relative path and preview URL (no local absolute paths exposed).
-    """
+async def _store_reference_image_upload(file: UploadFile) -> Dict[str, str]:
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -227,10 +220,26 @@ async def upload_reference_image(file: UploadFile = File(...)):
     with open(save_path, "wb") as f:
         f.write(content)
 
-    # Return relative path (safe for frontend) and preview URL
     relative_path = f"input/reference_uploads/{safe_name}"
     preview_url = f"/static/input/reference_uploads/{safe_name}"
-    return JSONResponse({"reference_image_path": relative_path, "preview_url": preview_url})
+    return {"reference_image_path": relative_path, "preview_url": preview_url}
+
+
+@router.post("/api/verticals/{vertical}/reference-images")
+async def upload_vertical_reference_image(vertical: str, file: UploadFile = File(...)):
+    _require_vertical(vertical)
+    return JSONResponse(await _store_reference_image_upload(file))
+
+
+@router.post("/api/nail/assets/reference-image")
+async def upload_reference_image(file: UploadFile = File(...)):
+    """
+    Upload a reference image for image-to-image generation.
+
+    Allowed types: png, jpg, jpeg, webp. Max size: 10MB.
+    Returns a safe relative path and preview URL (no local absolute paths exposed).
+    """
+    return JSONResponse(await _store_reference_image_upload(file))
 
 
 @router.post("/api/nail/notes", response_model=JobCreatedResponse, status_code=status.HTTP_202_ACCEPTED)

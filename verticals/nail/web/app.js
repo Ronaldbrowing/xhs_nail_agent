@@ -1503,7 +1503,8 @@
     formData.append("file", file);
 
     try {
-      const resp = await fetch("/api/nail/assets/reference-image", {
+      const vertical = encodeURIComponent(selectedVertical || APP_CONFIG.currentVertical);
+      const resp = await fetch("/api/verticals/" + vertical + "/reference-images", {
         method: "POST",
         body: formData,
       });
