@@ -4,6 +4,7 @@ import shutil
 import threading
 import uuid
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, status
 from fastapi.responses import JSONResponse
@@ -12,12 +13,98 @@ from project_paths import OUTPUT_DIR, INPUT_DIR, PROJECT_ROOT, resolve_project_p
 from verticals.nail.service.job_store import create_job, find_job_by_note_id, get_job
 from verticals.nail.service.nail_note_service import create_nail_note
 from verticals.nail.service.schemas import NailNoteCreateRequest
+from verticals.nail.service.vertical_registry import VerticalRegistry
+from verticals.nail.service.history_service import HistoryService
+from verticals.nail.service.package_service import PackageService
 
 from .schemas import HealthResponse, JobCreatedResponse, JobStatusResponse
 
 
 router = APIRouter()
 _NOTE_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+# ── Vertical Registry helpers ────────────────────────────────────────────────
+
+_registry = VerticalRegistry.get_instance()
+
+
+def _require_vertical(vertical: str) -> None:
+    """Raise 400 if vertical is not registered."""
+    if not _registry.is_valid_vertical(vertical):
+        raise HTTPException(status_code=400, detail=f"unknown vertical: {vertical}")
+
+
+def _get_history_service() -> HistoryService:
+    return HistoryService()
+
+
+def _get_package_service() -> PackageService:
+    return PackageService()
+
+
+# ── /api/verticals ──────────────────────────────────────────────────────────
+
+class VerticalListResponse(BaseModel if "BaseModel" in dir() else object):
+    verticals: List[Dict[str, Any]]
+
+
+@router.get("/api/verticals")
+def list_verticals():
+    """Return all registered verticals."""
+    verticals = [v.to_dict() for v in _registry.list_verticals()]
+    return JSONResponse(content={"verticals": verticals})
+
+
+# ── /api/verticals/{vertical}/notes ──────────────────────────────────────────
+
+class HistoryListResponse(BaseModel if "BaseModel" in dir() else object):
+    items: List[Dict[str, Any]]
+    total: int
+    vertical: str
+
+
+@router.get("/api/verticals/{vertical}/notes")
+def list_notes(vertical: str):
+    """Return服务端历史列表，按 vertical 过滤。"""
+    _require_vertical(vertical)
+    svc = _get_history_service()
+    items = svc.list_notes(vertical)
+    total = len(items)
+    return JSONResponse(content={"items": items, "total": total, "vertical": vertical})
+
+
+# ── /api/verticals/{vertical}/notes/{note_id}/package ───────────────────────
+
+_note_id_re_check = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _reject_invalid_note_id(note_id: str) -> None:
+    if not _note_id_re_check.fullmatch(note_id or ""):
+        raise HTTPException(status_code=400, detail="invalid note_id")
+    if ".." in note_id or note_id.startswith("/") or "\\" in note_id:
+        raise HTTPException(status_code=400, detail="invalid note_id")
+
+
+@router.get("/api/verticals/{vertical}/notes/{note_id}/package")
+def get_note_package(vertical: str, note_id: str):
+    """Return note_package.json for the given vertical and note_id."""
+    _require_vertical(vertical)
+    _reject_invalid_note_id(note_id)
+
+    svc = _get_package_service()
+    try:
+        package = svc.load_package(vertical, note_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="note package not found")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return JSONResponse(content=package)
+
+
+# ── Existing endpoints ────────────────────────────────────────────────────────
 
 
 def _run_create_job(job_id: str, request: NailNoteCreateRequest) -> None:
@@ -38,11 +125,6 @@ def _ensure_output_path(path: Path) -> Path:
     except ValueError:
         raise ValueError("path escapes output directory")
     return resolved
-
-
-@router.get("/health", response_model=HealthResponse)
-def health() -> HealthResponse:
-    return HealthResponse(status="ok")
 
 
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}

@@ -127,17 +127,21 @@ function saveLastJob(context) {
 ### TD-010：多 vertical 扩展未验证（高优先级）
 
 **描述**：
-系统架构设计支持多 vertical，但除 nail 外无其他 vertical 真实落地验证。
+系统架构设计支持多 vertical，但除 nail 外无其他 vertical 真实落地验证。此外，VerticalRegistry 和 /api/verticals 路由目前临时挂在 `verticals/nail/service/` 和 `verticals/nail/api/routes.py` 下，是为了避免 Milestone 1 引入目录级重构。
 
 **影响**：
 - VerticalRegistry、VerticalAdapter 架构正确性未经验证
 - 新增 vertical 路径可能存在问题
 - 可能在不知情的情况下写死了 nail 逻辑
+- registry 和平台级路由目前在 nail 模块下，逻辑上属于平台级但物理位置在垂类下
 
 **偿还方案**：
 1. v1.0 保留 sample vertical 扩展点（即使不实现真实 workflow）
 2. v1.1 优先实现一个简单 vertical（如 outfit）验证架构
 3. 单元测试覆盖 vertical 切换逻辑
+4. v1.1 应将 VerticalRegistry 迁移到平台级 `src/service/vertical_registry.py`
+5. v1.1 应将 /api/verticals 路由迁移到平台级路由层（如 `src/api/routes.py`）
+6. nail 应仅作为 vertical adapter 存在，不承载平台级逻辑
 
 **阻塞 v1.0**：否，但需保留扩展点
 
