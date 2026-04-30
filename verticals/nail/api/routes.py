@@ -145,6 +145,19 @@ def _run_create_job(job_id: str, request: NailNoteCreateRequest) -> None:
     create_nail_note(request, request_id=job_id)
 
 
+def _validate_nail_reference_source(request: NailNoteCreateRequest) -> None:
+    if request.reference_source != "case_id":
+        return
+
+    svc = _get_case_service()
+    try:
+        svc.get_case("nail", request.case_id or "")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"case_id not found or has no image: {request.case_id}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 def _package_path_for_note(note_id: str) -> Path:
     if not _NOTE_ID_RE.fullmatch(note_id or ""):
         raise ValueError("invalid note_id")
@@ -211,6 +224,7 @@ async def upload_reference_image(file: UploadFile = File(...)):
 def create_note(request: NailNoteCreateRequest) -> JobCreatedResponse:
     import uuid
 
+    _validate_nail_reference_source(request)
     job_id = "job_{token}".format(token=uuid.uuid4().hex[:12])
     payload = request.as_dict()
     create_job(job_id, payload=payload, status="queued")
