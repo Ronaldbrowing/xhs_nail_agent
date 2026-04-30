@@ -2,17 +2,24 @@ import json
 import shutil
 import time
 import unittest
+from io import BytesIO
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from project_paths import PROJECT_ROOT, resolve_project_path
+from project_paths import INPUT_DIR, PROJECT_ROOT, resolve_project_path
 from verticals.nail.service import job_store
 
 
 class NailFastAPITests(unittest.TestCase):
+    TINY_PNG_BYTES = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\xff"
+        b"\xff?\x00\x05\xfe\x02\xfeA\x0c\x1b\x8d\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+
     def setUp(self):
         from verticals.nail.api.app import app
 
@@ -71,9 +78,13 @@ class NailFastAPITests(unittest.TestCase):
         self.assertIn("renderPartialFailedJob", js_body)
         self.assertIn("部分完成，但结果包读取失败", js_body)
         self.assertIn('applyStatus("restored")', js_body)
+        self.assertIn("/api/nail/assets/reference-image", js_body)
+        self.assertIn("case_id", js_body)
         self.assertIn("上次任务记录已过期，但已根据结果包恢复内容。", js_body)
         self.assertIn("recent-job-delete", js_body)
         self.assertIn("删除记录", js_body)
+        self.assertNotIn("summary.innerHTML", js_body)
+        self.assertNotIn("meta.innerHTML", js_body)
 
         css_response = self.client.get("/web/style.css")
         self.assertEqual(css_response.status_code, 200)
@@ -82,6 +93,42 @@ class NailFastAPITests(unittest.TestCase):
         self.assertIn(".resume-panel-inline", css_body)
         self.assertIn("background: #fff8f6;", css_body)
         self.assertIn(".recent-job-delete", css_body)
+
+    def test_input_dir_exists_and_reference_upload_supports_png(self):
+        self.assertTrue(INPUT_DIR.exists())
+
+        response = self.client.post(
+            "/api/nail/assets/reference-image",
+            files={"file": ("avatar.png", BytesIO(self.TINY_PNG_BYTES), "image/png")},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("reference_image_path", payload)
+        self.assertIn("preview_url", payload)
+        self.assertTrue(payload["reference_image_path"].startswith("input/reference_uploads/ref_"))
+        self.assertTrue(payload["reference_image_path"].endswith(".png"))
+        self.assertTrue(payload["preview_url"].startswith("/static/input/reference_uploads/ref_"))
+        self.assertTrue(payload["preview_url"].endswith(".png"))
+        self.assertNotIn("/Users/", payload["reference_image_path"])
+        self.assertNotIn("/Users/", payload["preview_url"])
+        self.assertNotIn("..", payload["reference_image_path"])
+        self.assertNotIn("..", payload["preview_url"])
+
+        uploaded_file = resolve_project_path(payload["reference_image_path"])
+        self.assertTrue(uploaded_file.exists())
+        self._cleanup_dirs.append(INPUT_DIR / "reference_uploads")
+
+        preview_response = self.client.get(payload["preview_url"])
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertEqual(preview_response.content, self.TINY_PNG_BYTES)
+
+    def test_reference_upload_rejects_text_plain(self):
+        response = self.client.post(
+            "/api/nail/assets/reference-image",
+            files={"file": ("notes.txt", BytesIO(b"hello"), "text/plain")},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("不支持的文件类型", response.json()["detail"])
 
     def test_post_generate_images_false_returns_job_and_package(self):
         response = self.client.post(

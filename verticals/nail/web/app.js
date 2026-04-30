@@ -749,6 +749,7 @@
                   updatedAt: new Date().toISOString(),
                 });
                 renderRecentJobs();
+                hideResumePanel();
                 return;
               }
             } catch (fallbackErr) {
@@ -934,38 +935,42 @@
       dropZone.classList.remove("drag-over");
       const files = e.dataTransfer && e.dataTransfer.files;
       if (files && files.length > 0) {
-        refInput && refInput.files && (refInput.files = files);
-        if (refInput) refInput.dispatchEvent(new Event("change", { bubbles: true }));
+        uploadReferenceFile(files[0]);
       }
     });
+  }
+
+  async function uploadReferenceFile(file) {
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const resp = await fetch("/api/nail/assets/reference-image", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.detail || "上传失败");
+      }
+      currentReferenceImage = {
+        path: data.reference_image_path,
+        previewUrl: data.preview_url,
+      };
+      showReferencePreview(data.preview_url);
+    } catch (err) {
+      alert("上传失败：" + formatError(err));
+      clearReferenceImage();
+    }
   }
 
   if (refInput) {
     refInput.addEventListener("change", async function () {
       const file = refInput.files && refInput.files[0];
       if (!file) return;
-
-      const formData = new FormData();
-      formData.append("file", file);
-
-      try {
-        const resp = await fetch("/api/nail/assets/reference-image", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(data.detail || "上传失败");
-        }
-        currentReferenceImage = {
-          path: data.reference_image_path,
-          previewUrl: data.preview_url,
-        };
-        showReferencePreview(data.preview_url);
-      } catch (err) {
-        alert("上传失败：" + formatError(err));
-        clearReferenceImage();
-      }
+      await uploadReferenceFile(file);
     });
   }
 
@@ -998,14 +1003,29 @@
 
       const meta = document.createElement("div");
       meta.className = "recent-job-meta";
-      meta.innerHTML = "<span class=\"recent-job-id\">" + (job.jobId || "").slice(0, 12) + "...</span>"
-        + "<span class=\"recent-job-status\">" + status + "</span>"
-        + "<span class=\"recent-job-mode\">" + mode + "</span>";
+      const jobIdSpan = document.createElement("span");
+      jobIdSpan.className = "recent-job-id";
+      jobIdSpan.textContent = ((job.jobId || "").slice(0, 12) || "unknown") + "...";
+      const statusSpan = document.createElement("span");
+      statusSpan.className = "recent-job-status";
+      statusSpan.textContent = status;
+      const modeSpan = document.createElement("span");
+      modeSpan.className = "recent-job-mode";
+      modeSpan.textContent = mode;
+      meta.appendChild(jobIdSpan);
+      meta.appendChild(statusSpan);
+      meta.appendChild(modeSpan);
 
       const summary = document.createElement("div");
       summary.className = "recent-job-summary";
-      summary.innerHTML = "<span class=\"recent-job-brief\">" + brief + "</span>"
-        + "<span class=\"recent-job-time\">" + date + "</span>";
+      const briefSpan = document.createElement("span");
+      briefSpan.className = "recent-job-brief";
+      briefSpan.textContent = brief;
+      const timeSpan = document.createElement("span");
+      timeSpan.className = "recent-job-time";
+      timeSpan.textContent = date;
+      summary.appendChild(briefSpan);
+      summary.appendChild(timeSpan);
 
       const actions = document.createElement("div");
       actions.className = "recent-job-actions";

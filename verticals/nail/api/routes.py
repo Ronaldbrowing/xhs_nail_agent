@@ -47,6 +47,12 @@ def health() -> HealthResponse:
 
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+IMAGE_TYPE_SUFFIXES = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/webp": "webp",
+}
 
 
 @router.post("/api/nail/assets/reference-image")
@@ -70,7 +76,7 @@ async def upload_reference_image(file: UploadFile = File(...)):
             detail=f"文件大小超过 10MB 限制，当前 {len(content) // 1024 // 1024}MB",
         )
 
-    suffix = file.filename.split(".")[-1] if "." in file.filename else "png"
+    suffix = IMAGE_TYPE_SUFFIXES[file.content_type]
     safe_name = f"ref_{uuid.uuid4().hex[:12]}.{suffix}"
     save_dir = INPUT_DIR / "reference_uploads"
     save_dir.mkdir(parents=True, exist_ok=True)
