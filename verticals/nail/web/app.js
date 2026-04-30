@@ -92,6 +92,15 @@
       generated: "图片已生成",
       failed: "页面生成失败",
     },
+    stageLabelMap: {
+      queued: "排队中",
+      workflow_running: "生成中",
+      generating_text: "生成文案",
+      generating_images: "生成图片",
+      saving_package: "保存结果",
+      completed: "已完成",
+      failed: "已失败",
+    },
   };
 
   let selectedVertical = APP_CONFIG.currentVertical;
@@ -151,6 +160,7 @@
   let currentJobContext = null;
   let continueQueryPromise = null;
   let currentStatusKey = "idle";
+  let activeJobToken = 0;
 
   function ensureResumeElements() {
     if (!resumePanel || !resumeText || !continueButton || !clearJobButton) {
@@ -281,6 +291,90 @@
     }
   }
 
+  function formatStageLabel(stage) {
+    if (!stage) {
+      return null;
+    }
+    return APP_CONFIG.stageLabelMap[stage] || stage;
+  }
+
+  function formatElapsedSeconds(value) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      return null;
+    }
+    if (value < 1) {
+      return value.toFixed(2) + " 秒";
+    }
+    if (value < 10) {
+      return value.toFixed(1) + " 秒";
+    }
+    return Math.round(value) + " 秒";
+  }
+
+  function buildProgressDetail(stateKey, detailText, job) {
+    const state = APP_CONFIG.jobStatusMap[stateKey] || APP_CONFIG.jobStatusMap.idle;
+    const segments = [];
+    const baseText = detailText || state.detail;
+    if (baseText) {
+      segments.push(baseText);
+    }
+
+    if (!job || stateKey === "restored") {
+      return segments.join(" · ");
+    }
+
+    const stageText = formatStageLabel(job.stage);
+    if (stageText) {
+      segments.push("阶段：" + stageText);
+    }
+
+    const elapsedText = formatElapsedSeconds(job.elapsed_seconds);
+    if (elapsedText) {
+      const isTerminal = stateKey === "succeeded" || stateKey === "failed" || stateKey === "partial_failed";
+      segments.push((isTerminal ? "总耗时：" : "耗时：") + elapsedText);
+    }
+
+    if ((stateKey === "failed" || stateKey === "partial_failed") && job.failed_stage) {
+      segments.push("失败阶段：" + job.failed_stage);
+    }
+
+    if ((stateKey === "failed" || stateKey === "partial_failed") && job.error_summary) {
+      segments.push("错误摘要：" + job.error_summary);
+    }
+
+    return segments.join(" · ");
+  }
+
+  function buildJobMetaPayload(job, extras) {
+    const data = job || {};
+    const payload = data.payload || {};
+    const overrides = extras || {};
+    return sanitizePayload({
+      note: overrides.note,
+      job_id: data.job_id || overrides.job_id || null,
+      status: data.status || overrides.status || null,
+      stage: data.stage || overrides.stage || null,
+      elapsed_seconds: data.elapsed_seconds,
+      started_at: data.started_at || null,
+      updated_at: data.updated_at || null,
+      completed_at: data.completed_at || data.finished_at || null,
+      failed_stage: data.failed_stage || overrides.failed_stage || null,
+      error_summary: data.error_summary || overrides.error_summary || null,
+      note_id: data.note_id || overrides.note_id || null,
+      vertical: payload.vertical || overrides.vertical || selectedVertical,
+      reference_source: payload.reference_source || overrides.reference_source || null,
+      case_id: payload.case_id || overrides.case_id || null,
+      reference_image_path: payload.reference_image_path || overrides.reference_image_path || null,
+      package_path: data.package_path || overrides.package_path || null,
+      output_dir: data.output_dir || overrides.output_dir || null,
+      error: data.error || overrides.error || null,
+      qa_score: overrides.qa_score || null,
+      url: overrides.url || null,
+      status_code: overrides.status_code || null,
+      diagnostics: data.diagnostics || overrides.diagnostics || null,
+    });
+  }
+
   function getPollConfig(generateImages) {
     if (generateImages) {
       return {
@@ -409,11 +503,11 @@
     }
   }
 
-  function applyStatus(stateKey, detailText) {
+  function applyStatus(stateKey, detailText, job) {
     const state = APP_CONFIG.jobStatusMap[stateKey] || APP_CONFIG.jobStatusMap.idle;
     currentStatusKey = stateKey;
     statusText.textContent = state.title;
-    progressDetail.textContent = detailText || state.detail;
+    progressDetail.textContent = buildProgressDetail(stateKey, detailText, job);
     statusBadge.textContent = state.badge;
     statusBadge.className = "status-badge status-" + stateKey;
     progressPanel.hidden = stateKey === "idle" && resumePanel.hidden;
@@ -821,6 +915,7 @@
     if (!item || !item.note_id || !selectedVertical) {
       return;
     }
+    activeJobToken += 1;
     applyStatus("running", "正在加载历史结果包");
     try {
       const packageData = await fetchJson(buildVerticalPackageUrl(item.note_id));
@@ -836,23 +931,32 @@
       hideResultEmptyState();
       applyStatus("restored", "已从历史记录回放内容。");
       resultMeta.textContent = "当前正在查看服务端历史内容回放。";
-      setJobMeta({
-        note: "history replay",
-        vertical: selectedVertical,
-        note_id: item.note_id,
-        generate_images: generateImages,
-      });
+      setJobMeta(
+        buildJobMetaPayload(
+          { note_id: item.note_id, status: "history_replay" },
+          {
+            note: "history replay",
+            vertical: selectedVertical,
+          }
+        )
+      );
     } catch (error) {
       applyStatus("failed", "历史内容加载失败");
       resultMeta.textContent = "这条历史内容暂时无法回放，请稍后刷新历史后重试。";
-      setJobMeta({
-        note: "history replay failed",
-        vertical: selectedVertical,
-        note_id: item.note_id,
-        status: error.status || null,
-        url: error.url || null,
-        error: formatError(error),
-      });
+      setJobMeta(
+        buildJobMetaPayload(
+          { note_id: item.note_id },
+          {
+            note: "history replay failed",
+            vertical: selectedVertical,
+            status: error.status || null,
+            url: error.url || null,
+            error: formatError(error),
+            failed_stage: "history_replay",
+            error_summary: formatError(error),
+          }
+        )
+      );
     }
   }
 
@@ -1004,12 +1108,13 @@
     noteSummary.appendChild(buildSummaryCard("正文", packageData.body || "—"));
     noteSummary.appendChild(buildSummaryCard("标签", buildTagList(packageData.tags || [])));
 
-    setJobMeta({
-      job_id: job.job_id,
-      note_id: packageData.note_id,
-      qa_score: packageData.diagnostics ? packageData.diagnostics.qa_score : null,
-      error: job.error || null,
-    });
+    setJobMeta(
+      buildJobMetaPayload(job, {
+        note_id: packageData.note_id,
+        qa_score: packageData.diagnostics ? packageData.diagnostics.qa_score : null,
+        error: job.error || null,
+      })
+    );
 
     (packageData.pages || []).forEach(function (page) {
       pagesGrid.appendChild(buildPageCard(page, generateImages));
@@ -1051,7 +1156,7 @@
       throw new Error("job package render requires note_id");
     }
 
-    applyStatus(statusKey, detailText);
+    applyStatus(statusKey, detailText, job);
     const packageData = await fetchJson(buildVerticalPackageUrl(job.note_id));
     saveLastJob({
       jobId: job.job_id,
@@ -1091,23 +1196,27 @@
       resultMeta.textContent = "这次任务只完成了部分内容，你可以先查看已生成的标题、正文、标签和页面结构。";
       return true;
     } catch (error) {
-      applyStatus("partial_failed", "部分完成，但结果包读取失败");
+      applyStatus("partial_failed", "部分完成，但结果包读取失败", job);
       resultMeta.textContent = "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。";
-      setJobMeta({
-        job_id: job.job_id,
-        note_id: job.note_id || null,
-        error: formatError(error),
-        package_path: job.package_path || null,
-        diagnostics: job.diagnostics || null,
-      });
+      setJobMeta(
+        buildJobMetaPayload(job, {
+          error: formatError(error),
+          package_path: job.package_path || null,
+          diagnostics: job.diagnostics || null,
+        })
+      );
       return false;
     }
   }
 
   async function pollJob(jobId, generateImages) {
+    const token = activeJobToken;
     const pollConfig = getPollConfig(generateImages);
     const startedAt = Date.now();
     while (Date.now() - startedAt < pollConfig.maxPollMs) {
+      if (token !== activeJobToken) {
+        return { kind: "cancelled", job: { job_id: jobId } };
+      }
       const job = await fetchJson("/api/jobs/" + encodeURIComponent(jobId));
       saveLastJob({
         jobId: job.job_id,
@@ -1124,11 +1233,11 @@
       });
       renderRecentJobs();
       if (job.status === "queued") {
-        applyStatus("queued", "已提交，等待开始");
+        applyStatus("queued", "已提交，等待开始", job);
       } else if (job.status === "running") {
-        applyStatus("running", "正在生成内容");
+        applyStatus("running", "正在生成内容", job);
       }
-      setJobMeta(job);
+      setJobMeta(buildJobMetaPayload(job));
       if (job.status === "succeeded") {
         return { kind: "success", job: job };
       }
@@ -1155,9 +1264,13 @@
     continueButton.textContent = "查询中...";
 
     continueQueryPromise = (async function () {
+      const token = ++activeJobToken;
       try {
         const job = await fetchJson("/api/jobs/" + encodeURIComponent(jobContext.jobId));
-        setJobMeta(job);
+        if (token !== activeJobToken) {
+          return;
+        }
+        setJobMeta(buildJobMetaPayload(job));
         saveLastJob({
           jobId: job.job_id,
           noteId: job.note_id || null,
@@ -1165,52 +1278,67 @@
         });
 
         if (job.status === "succeeded") {
+          if (token !== activeJobToken) {
+            return;
+          }
           await renderSucceededJob(job, jobContext.generateImages);
           return;
         }
 
         if (job.status === "partial_failed") {
+          if (token !== activeJobToken) {
+            return;
+          }
           if (job.note_id) {
             await tryRenderPartialFailedJob(job, jobContext.generateImages);
           } else {
-            applyStatus("partial_failed");
+            applyStatus("partial_failed", null, job);
             resultMeta.textContent = "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。";
           }
           return;
         }
 
         if (job.status === "failed") {
-          applyStatus("failed");
+          applyStatus("failed", null, job);
           resultMeta.textContent = "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
           return;
         }
 
-        applyStatus(job.status === "running" ? "running" : "queued");
+        applyStatus(job.status === "running" ? "running" : "queued", null, job);
         showResumePanel("生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。");
         const result = await pollJob(job.job_id, jobContext.generateImages);
+        if (result.kind === "cancelled") {
+          return;
+        }
 
         if (result.kind === "timeout") {
-          applyStatus("timeout");
+          applyStatus("timeout", null, job);
           resultMeta.textContent = "生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。";
-          setJobMeta({ job_id: job.job_id, status: "timeout" });
+          setJobMeta(buildJobMetaPayload({ job_id: job.job_id, status: "timeout" }));
           showResumePanel("生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。");
           return;
         }
 
         if (result.kind === "failed") {
           const failedJob = result.job;
+          if (token !== activeJobToken) {
+            return;
+          }
           if (failedJob.status === "partial_failed" && failedJob.note_id) {
             await tryRenderPartialFailedJob(failedJob, jobContext.generateImages);
           } else {
-            applyStatus(failedJob.status === "partial_failed" ? "partial_failed" : "failed");
+            applyStatus(failedJob.status === "partial_failed" ? "partial_failed" : "failed", null, failedJob);
             resultMeta.textContent = failedJob.status === "partial_failed"
               ? "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。"
               : "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
-            setJobMeta(failedJob);
+            setJobMeta(buildJobMetaPayload(failedJob));
           }
           return;
         }
 
+        if (token !== activeJobToken) {
+          return;
+        }
         await renderSucceededJob(result.job, jobContext.generateImages);
       } catch (error) {
         const isNotFound = error.status === 404 ||
@@ -1228,12 +1356,12 @@
                 applyStatus("restored");
                 resultMeta.textContent = "上次任务记录已过期，但已根据结果包恢复内容。";
                 renderPackage(packageData, jobContext.generateImages, { job_id: jobContext.jobId, status: "restored", note_id: jobContext.noteId, error: null });
-                setJobMeta({
-                  note: "从结果包恢复",
-                  job_id: jobContext.jobId,
-                  note_id: jobContext.noteId,
-                  status: "restored",
-                });
+                setJobMeta(
+                  buildJobMetaPayload(
+                    { job_id: jobContext.jobId, note_id: jobContext.noteId, status: "restored" },
+                    { note: "从结果包恢复" }
+                  )
+                );
                 upsertRecentJob({
                   jobId: jobContext.jobId,
                   noteId: jobContext.noteId,
@@ -1253,12 +1381,26 @@
           clearLastJob();
           applyStatus("failed", "无法找到上次任务");
           resultMeta.textContent = "无法找到上次任务，可能已过期或被清除。";
-          setJobMeta({ error: formatError(error), note: "任务不存在或已失效" });
+          setJobMeta(buildJobMetaPayload({}, { error: formatError(error), note: "任务不存在或已失效" }));
           hideResumePanel();
         } else {
-          applyStatus("failed", "暂时无法查询任务");
+          applyStatus("failed", "暂时无法查询任务", {
+            failed_stage: "job_query",
+            error_summary: formatError(error),
+          });
           resultMeta.textContent = "暂时无法查询任务，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。";
-          setJobMeta({ error: formatError(error), url: error.url || null, status: error.status || null });
+          setJobMeta(
+            buildJobMetaPayload(
+              {},
+              {
+                error: formatError(error),
+                url: error.url || null,
+                status: error.status || null,
+                failed_stage: "job_query",
+                error_summary: formatError(error),
+              }
+            )
+          );
           // keep resume panel open so user can retry
         }
       } finally {
@@ -1380,7 +1522,7 @@
 
     try {
       applyStatus("queued");
-      setJobMeta(payload);
+      setJobMeta(buildJobMetaPayload({}, payload));
 
       const created = await fetchJson("/api/nail/notes", {
         method: "POST",
@@ -1388,8 +1530,11 @@
         body: JSON.stringify(payload),
       });
 
-      applyStatus("queued", "已提交，等待开始");
-      setJobMeta({ job_id: created.job_id, payload: payload });
+      applyStatus("queued", "已提交，等待开始", {
+        stage: "queued",
+        payload: payload,
+      });
+      setJobMeta(buildJobMetaPayload({ job_id: created.job_id, status: "queued", stage: "queued", payload: payload }));
       addRecentJob({
         jobId: created.job_id,
         noteId: null,
@@ -1405,11 +1550,15 @@
         generateImages: generateImages,
       });
 
+      const submitToken = ++activeJobToken;
       const result = await pollJob(created.job_id, generateImages);
+      if (result.kind === "cancelled" || submitToken !== activeJobToken) {
+        return;
+      }
       if (result.kind === "timeout") {
-        applyStatus("timeout");
+        applyStatus("timeout", null, { stage: "workflow_running" });
         resultMeta.textContent = "生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。";
-        setJobMeta({ job_id: created.job_id, status: "timeout" });
+        setJobMeta(buildJobMetaPayload({ job_id: created.job_id, status: "timeout" }));
         showResumePanel("生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。");
         return;
       }
@@ -1417,23 +1566,32 @@
       if (result.kind === "failed") {
         const job = result.job;
         const finalStatus = job && job.status === "partial_failed" ? "partial_failed" : "failed";
+        if (submitToken !== activeJobToken) {
+          return;
+        }
         if (finalStatus === "partial_failed" && job && job.note_id) {
           await tryRenderPartialFailedJob(job, generateImages);
         } else {
-          applyStatus(finalStatus);
+          applyStatus(finalStatus, null, job);
           resultMeta.textContent = finalStatus === "partial_failed"
             ? "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。"
             : "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
-          setJobMeta(job || { job_id: created.job_id, status: finalStatus });
+          setJobMeta(buildJobMetaPayload(job || { job_id: created.job_id, status: finalStatus }));
         }
         return;
       }
 
+      if (submitToken !== activeJobToken) {
+        return;
+      }
       await renderSucceededJob(result.job, generateImages);
     } catch (error) {
-      applyStatus("failed", "生成失败");
+      applyStatus("failed", "生成失败", {
+        failed_stage: "job_create",
+        error_summary: formatError(error),
+      });
       resultMeta.textContent = "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
-      setJobMeta({ error: formatError(error) });
+      setJobMeta(buildJobMetaPayload({}, { error: formatError(error), failed_stage: "job_create", error_summary: formatError(error) }));
     } finally {
       submitButton.disabled = false;
       submitButton.textContent = "生成内容预览";
