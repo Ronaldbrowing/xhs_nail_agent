@@ -367,6 +367,8 @@
       text = parts.join("\n\n");
     } else if (key === "markdown") {
       text = buildMarkdown(currentPreviewData);
+    } else if (key === "json") {
+      text = buildJson(currentPreviewData);
     }
     if (!text) {
       return;
@@ -421,6 +423,29 @@
       });
     }
     return lines.join("\n");
+  }
+
+  function buildJson(packageData) {
+    const safeTags = Array.isArray(packageData.tags)
+      ? packageData.tags.filter(function (t) { return t != null && typeof t === "string"; })
+      : [];
+    const safePages = Array.isArray(packageData.pages)
+      ? packageData.pages.map(function (page) {
+          return {
+            page_no: page.page_no != null ? page.page_no : null,
+            role: page.role != null ? page.role : null,
+            status: page.status != null ? page.status : null,
+          };
+        })
+      : [];
+    return JSON.stringify({
+      note_id: packageData.note_id || null,
+      selected_title: packageData.selected_title || null,
+      body: packageData.body || null,
+      tags: safeTags.length ? safeTags : null,
+      pages: safePages.length ? safePages : null,
+      vertical: packageData.vertical || null,
+    }, null, 2);
   }
 
   function buildProgressDetail(stateKey, detailText, job) {
@@ -1228,6 +1253,7 @@
     copyActionsBar.appendChild(buildCopyButton("复制标签", "tags"));
     copyActionsBar.appendChild(buildCopyButton("复制完整内容", "full"));
     copyActionsBar.appendChild(buildCopyButton("复制 Markdown", "markdown"));
+    copyActionsBar.appendChild(buildCopyButton("复制 JSON", "json"));
     noteSummary.appendChild(copyActionsBar);
 
     setJobMeta(
