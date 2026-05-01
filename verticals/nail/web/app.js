@@ -162,6 +162,8 @@
   let currentStatusKey = "idle";
   let activeJobToken = 0;
   let currentPreviewData = null; // stores packageData for copy actions
+  let previewState = "empty"; // "empty" | "generating" | "failed" | "quick_preview" | "history_replay"
+  let previewFailedSummary = null; // stores error_summary for failed state
 
   function ensureResumeElements() {
     if (!resumePanel || !resumeText || !continueButton || !clearJobButton) {
@@ -654,6 +656,9 @@
   function clearResults() {
     noteSummary.innerHTML = "";
     pagesGrid.innerHTML = "";
+    currentPreviewData = null;
+    previewState = "empty";
+    previewFailedSummary = null;
     showResultEmptyState();
     resultMeta.textContent = "生成完成后，这里会展示标题、正文、标签和多页内容结构。";
   }
@@ -1053,6 +1058,9 @@
       return;
     }
     activeJobToken += 1;
+    previewState = "history_replay";
+    previewFailedSummary = null;
+    currentPreviewData = null;
     applyStatus("running", "正在加载历史结果包");
     try {
       const packageData = await fetchJson(buildVerticalPackageUrl(item.note_id));
@@ -1232,9 +1240,16 @@
 
   function renderPackage(packageData, generateImages, job) {
     currentPreviewData = packageData;
+    previewState = job && job.status === "history_replay" ? "history_replay" : "quick_preview";
+    previewFailedSummary = null;
     clearResults();
     showResults();
-    resultMeta.textContent = "已经为你整理出一版可查看的标题、正文、标签和页面结构。";
+
+    if (previewState === "history_replay") {
+      resultMeta.textContent = "当前正在查看历史内容回放。";
+    } else {
+      resultMeta.textContent = "已经为你整理出一版可查看的标题、正文、标签和页面结构。";
+    }
 
     noteSummary.appendChild(
       buildSummaryCard(
@@ -1382,8 +1397,10 @@
       renderRecentJobs();
       if (job.status === "queued") {
         applyStatus("queued", "已提交，等待开始", job);
+        previewState = "generating";
       } else if (job.status === "running") {
         applyStatus("running", "正在生成内容", job);
+        previewState = "generating";
       }
       setJobMeta(buildJobMetaPayload(job));
       if (job.status === "succeeded") {
@@ -1448,6 +1465,8 @@
 
         if (job.status === "failed") {
           applyStatus("failed", null, job);
+          previewState = "failed";
+          previewFailedSummary = job.error_summary ? job.error_summary : null;
           resultMeta.textContent = "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
           return;
         }
@@ -1642,6 +1661,10 @@
     submitButton.disabled = true;
     submitButton.textContent = "生成中...";
 
+    previewState = "generating";
+    previewFailedSummary = null;
+    resultMeta.textContent = "正在生成内容预览，请稍候...";
+
     const generateImages = enableImagesField.checked;
     const caseIdValue = caseIdField && caseIdField.value ? caseIdField.value.trim() : "";
     let referenceSource = "none";
@@ -1721,6 +1744,8 @@
           await tryRenderPartialFailedJob(job, generateImages);
         } else {
           applyStatus(finalStatus, null, job);
+          previewState = "failed";
+          previewFailedSummary = (job && job.error_summary) ? job.error_summary : null;
           resultMeta.textContent = finalStatus === "partial_failed"
             ? "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。"
             : "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
