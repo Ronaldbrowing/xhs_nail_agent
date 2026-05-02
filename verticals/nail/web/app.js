@@ -489,12 +489,12 @@
     button.disabled = true;
     button.textContent = "导出中";
     try {
-      const response = await fetchJson(buildVerticalPackageUrl(item.note_id));
-      const packageData = await response.json();
+      const packageData = await fetchJson(buildVerticalPackageUrl(item.note_id));
       const jsonStr = buildJson(packageData);
       triggerDownload(jsonStr, item.note_id + "_export.json", "application/json;charset=utf-8");
     } catch (error) {
       failed = true;
+      console.error("Failed to export history item", error);
     } finally {
       if (failed) {
         button.textContent = "导出失败";
@@ -515,12 +515,12 @@
     button.disabled = true;
     button.textContent = "导出中";
     try {
-      const response = await fetchJson(buildVerticalPackageUrl(item.note_id));
-      const packageData = await response.json();
+      const packageData = await fetchJson(buildVerticalPackageUrl(item.note_id));
       const mdStr = buildMarkdown(packageData);
       triggerDownload(mdStr, item.note_id + "_export.md", "text/markdown;charset=utf-8");
     } catch (error) {
       failed = true;
+      console.error("Failed to export history item", error);
     } finally {
       if (failed) {
         button.textContent = "导出失败";
