@@ -2,7 +2,7 @@
 
 - **来源文档**：docs/vertical_content_studio_mvp_v1_requirements.md
 - **生成日期**：2026-04-30
-- **当前阶段**：Milestone 1 已完成，Milestone 2 已验收通过，Milestone 3 Slice A/B 已完成，Milestone 4 Slice A/B/C 已完成
+- **当前阶段**：Milestone 1 已完成，Milestone 2 已验收通过，Milestone 3 Slice A/B 已完成，Milestone 4 Slice A/B/C/D 已完成
 - **状态说明**：本文件是从 v1.md 派生的执行跟踪矩阵，不替代 v1.md。
 
 ## 概述
@@ -20,7 +20,7 @@
 | FR-002 | reference_source 模式管理 | 三种模式（none/local_path/case_id）UI 明确区分；前后端均校验互斥规则；非法组合返回 4xx | N/A（业务逻辑） | Studio 模式切换 | Request Validation | Milestone 2 | P0 | 已覆盖 | 切换模式时清理不适用字段；后端拒绝非法组合 | 部分满足 | 后端已完成 `reference_source` 推断与互斥校验；浏览器已实测 `case_id`/`none` 模式，`local_path` 文件选择器上传因 runtime 限制仍待人工点验 |
 | FR-003 | 参考图上传 | POST /api/verticals/{vertical}/reference-images 上传参考图；返回 safe relative path；校验文件类型和大小 | POST /api/verticals/{vertical}/reference-images | Studio 参考图区 | File Upload Handler | Milestone 2 | P1 | 已覆盖 | nail 下可上传参考图，返回路径可用于 local_path 模式 | 部分满足 | 新旧上传接口均可用：`/api/verticals/{vertical}/reference-images` 与兼容接口 `/api/nail/assets/reference-image`；接口与任务创建链路已验证，浏览器 file-picker 上传待人工点验 |
 | FR-004 | 任务进度观察 | GET /api/jobs/{job_id} 返回 job 状态；展示 status、stage、elapsed_seconds、error 信息；前端 Progress 模块轮询展示 | GET /api/jobs/{job_id} | Progress 模块 | Job Store | Milestone 3 | P0 | 已覆盖 | queued/running/succeeded/failed/partial_failed 状态可正确展示；失败展示错误原因 | 已完成 | `/api/jobs/{job_id}` 已返回 `stage`、`started_at`、`updated_at`、`completed_at`、`elapsed_seconds`、`failed_stage`、`error_summary`；老 job 记录可按 `status` fallback 推导 stage；前端 Progress 已接入 stage 中文文案与耗时展示 |
-| FR-005 | 内容预览 | Preview 模块展示标题、正文、标签、多页结构、图片、诊断信息；支持复制标题/正文/标签；历史回放与实时预览统一渲染；不得使用 innerHTML 渲染用户可控内容 | N/A（渲染逻辑） | Preview 模块 | Package Service | Milestone 3 | P0 | 已覆盖 | 标题/正文/标签可见；多页内容可见；图片可见或显示缺失；6个复制按钮可用（复制标题/正文/标签/完整内容/Markdown/JSON）；不使用 innerHTML | 已完成 | Preview 在 active job 完成与 History replay 场景下均可稳定展示；M4 Slice A/B/C 已完成复制标题、正文、标签、完整内容（含页面结构）、Markdown 格式、JSON 格式；History replay 后复制内容来自 replay package；`currentPreviewData` 复用 `renderPackage` 更新，状态隔离通过 `activeJobToken` 实现 |
+| FR-005 | 内容预览 | Preview 模块展示标题、正文、标签、多页结构、图片、诊断信息；支持复制标题/正文/标签；历史回放与实时预览统一渲染；不得使用 innerHTML 渲染用户可控内容 | N/A（渲染逻辑） | Preview 模块 | Package Service | Milestone 3 | P0 | 已覆盖 | 标题/正文/标签可见；多页内容可见；图片可见或显示缺失；6个复制按钮可用（复制标题/正文/标签/完整内容/Markdown/JSON）；不使用 innerHTML | 已完成 | M4 Slice A/B/C 已完成复制标题、正文、标签、完整内容（含页面结构）、Markdown 格式、JSON 格式；M4 Slice D 完成 Preview 状态优化：空态显示 placeholder 无复制按钮误触；生成中显示"正在生成内容预览"；失败态保留 error_summary；history_replay 态显示"当前正在查看服务端历史内容回放"；`currentPreviewData` 在 empty/generating/failed 状态清空；`activeJobToken` 隔离保护 replay 不被 active job 覆盖 |
 | FR-006 | 服务端历史列表 | GET /api/verticals/{vertical}/notes 扫描服务端 output 返回历史列表；按 vertical 过滤；清空 localStorage 后仍可恢复；损坏 package 跳过 | GET /api/verticals/{vertical}/notes | History 模块 | History Service | Milestone 1 | P0 | 已覆盖 | 清空 localStorage 后历史仍可加载；点击历史项可恢复预览 | 已完成 | History 面板主来源已切换为服务端历史，localStorage 已降级为最近任务/恢复入口 |
 | FR-007 | 历史 package 回放 | GET /api/verticals/{vertical}/notes/{note_id}/package 读取 note_package；字段缺失 fallback；图片缺失显示状态；vertical 不匹配返回 4xx | GET /api/verticals/{vertical}/notes/{note_id}/package | Preview 模块 | Package Service | Milestone 1 | P0 | 已覆盖 | 点击历史项可完整恢复预览；note_id 不存在返回 404；旧 package 可 fallback | 已完成 | 前端已接入 package 回放，真实图片历史任务可恢复 6 张图，unknown vertical 不再 fallback |
 | FR-008 | 案例库列表与选择 | GET /api/verticals/{vertical}/cases 返回案例列表；用户可浏览/选择案例；选择后回填生成工作台；case 按 vertical 隔离；跨 vertical case_id 校验 | GET /api/verticals/{vertical}/cases | Cases 模块 | Case Service | Milestone 2 | P0 | 已覆盖 | 案例库有前端入口；可浏览 nail 案例；点击后生成模式切换为 case_id | 已完成 | Cases API、case vertical 匹配校验、案例库 UI、案例选择与 `case_id` 模式浏览器 payload 已完成；unknown vertical 不 fallback 到 nail，unknown case_id 返回 404 |
@@ -31,8 +31,8 @@
 | FR-013 | 垂类适配器与工作流分发 | 通过 vertical registry/adapter 查找对应 workflow；新增 vertical 时不复制整套系统 | N/A（架构） | N/A | Vertical Adapter | Milestone 2 | P1 | N/A | 新增 vertical 只需新增 registry/adapter 配置 | 待开发 | 架构设计阶段，尚未实现 |
 | FR-014 | 前端垂类状态管理 | 前端状态包含 selectedVertical；UI 显示 content_platform、content_type、vertical；不再将文案写死为"美甲" | N/A（前端状态） | Studio/All | N/A | Milestone 2 | P1 | 已覆盖 | 页面显示当前 vertical；切换 vertical 时状态同步 | 部分满足 | `selectedVertical` 已由 `/api/verticals` 驱动，History/Cases/上传接口会随 vertical 变化；当前 UI 仍以 nail 为唯一已启用 vertical，内容类型与平台展示未完全抽象 |
 | FR-015 | 兼容旧接口与旧数据 | 旧 /api/nail/... 作为兼容层保留；旧 package fallback 推断 vertical；兼容层不得绕过新安全规则 | /api/nail/... 兼容层 | N/A | 兼容适配层 | Milestone 1 | P1 | 已覆盖 | 旧接口仍可工作；旧数据可 fallback | 部分满足 | 旧 `/api/nail/...` 与新 vertical 历史/package API 当前并存，兼容层仍需在后续统一梳理 |
-| FR-016 | 基础复制与内容使用能力 | 复制标题、正文、标签、单页文案、全部文案、Markdown、JSON；剪贴板不可用时显示失败提示 | N/A（UI 能力） | Preview 模块 | N/A | Milestone 4 | P0 | 待开发 | 复制按钮可正常复制对应内容；复制成功显示"已复制"；Markdown 格式合法；JSON 可 JSON.parse；History replay 后复制内容来自 replay package | 已完成 | M4 Slice A: 复制标题/正文/标签/完整内容（含页面结构）+ `showCopyFeedback` UI反馈；M4 Slice B: 复制 Markdown（含 #标题、##标签、##页面结构、###第N页）；M4 Slice C: 复制 JSON（含 note_id/selected_title/body/tags/pages/vertical）；所有复制通过 `navigator.clipboard.writeText` 实现；`getCopyableText` 过滤 undefined/null/[object Object]；History replay 状态隔离通过 `activeJobToken++` 保证；相关 commits: ecffd35, 34bc2ac, d142d58 |
-| FR-017 | 空状态与加载状态 | 历史为空时展示空状态；案例为空时展示空状态；加载中展示 loading；package 损坏展示损坏提示 | N/A（UI 状态） | All | N/A | Milestone 3 | P2 | 已覆盖 | 各模块空状态/加载状态展示正确 | 部分满足 | History 与 Preview 的 empty-state 互斥已修复，真实页面视觉确认空状态不会与已有内容同时显示；Progress 会在 running/completed/failed/replay 间切换清晰状态，但 Cases 空态的全量人工点验仍可继续补充 |
+| FR-016 | 基础复制与内容使用能力 | 复制标题、正文、标签、单页文案、全部文案、Markdown、JSON；剪贴板不可用时显示失败提示 | N/A（UI 能力） | Preview 模块 | N/A | Milestone 4 | P0 | 待开发 | 复制按钮可正常复制对应内容；复制成功显示"已复制"；Markdown 格式合法；JSON 可 JSON.parse；History replay 后复制内容来自 replay package | 已完成 | M4 Slice A: 复制标题/正文/标签/完整内容（含页面结构）+ `showCopyFeedback` UI反馈；M4 Slice B: 复制 Markdown（含 #标题、##标签、##页面结构、###第N页）；M4 Slice C: 复制 JSON（含 note_id/selected_title/body/tags/pages/vertical）；M4 Slice D: Preview 状态机（empty/generating/failed/quick_preview/history_replay）保护复制目标，`currentPreviewData` 在非 quick_preview/history_replay 状态清空，`activeJobToken` 隔离 replay 不被 active job 异步覆盖；相关 commits: ecffd35, 34bc2ac, d142d58, 975fc02 |
+| FR-017 | 空状态与加载状态 | 历史为空时展示空状态；案例为空时展示空状态；加载中展示 loading；package 损坏展示损坏提示 | N/A（UI 状态） | All | N/A | Milestone 3 | P2 | 已覆盖 | 各模块空状态/加载状态展示正确 | 部分满足 | History 与 Preview 的 empty-state 互斥已修复；M4 Slice D 优化 Preview 空态文案，空态下不暴露可误触的复制按钮；Progress 会在 running/completed/failed/replay 间切换清晰状态；Cases 空态的全量人工点验仍可继续补充 |
 | FR-018 | 基础文档与验收报告 | 每个 Milestone 输出验收报告；报告记录 commit、测试结果、手动验收、范围偏差 | N/A（文档） | N/A | N/A | Milestone 0 | P2 | N/A | 每个 Milestone 有验收报告 | Milestone 0 进行中 | 本阶段目标 |
 
 ---
@@ -83,6 +83,7 @@
 | 2026-04-30 | Codex/Hermes | 初始创建，基于 docs/vertical_content_studio_mvp_v1_requirements.md FR 定义 |
 | 2026-04-30 | Codex/Hermes | 同步 Milestone 1 已落地能力：vertical registry、服务端 history/package API、前端历史接入与 package 回放、localStorage 降级策略、`/health` 恢复 |
 | 2026-05-01 | Codex/Hermes | M4 Slice A/B/C 完成：Preview 复制能力（标题/正文/标签/完整内容）、Markdown 导出、JSON 导出；FR-005 已完成；FR-016 已完成；相关 commits: ecffd35, 34bc2ac, d142d58 |
+| 2026-05-02 | Codex/Hermes | M4 Slice D 完成：Preview 状态优化（empty/generating/failed/quick_preview/history_replay 五态）；空态无复制按钮误触；生成中显示"正在生成内容预览"；失败态保留 error_summary；history_replay 显示回放文案；`currentPreviewData` 在非内容态清空；`activeJobToken` 保护 replay 不被 active job 异步覆盖；删除未调用 `applyPreviewState` 死代码；相关 commit: 975fc02 |
 
 ---
 
