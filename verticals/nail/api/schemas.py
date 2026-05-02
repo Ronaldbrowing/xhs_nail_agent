@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     from pydantic import BaseModel, ConfigDict
@@ -21,6 +21,21 @@ class HealthResponse(_Model):
 class JobCreatedResponse(_Model):
     job_id: str
     status: str
+
+
+class FailedItem(_Model):
+    note_id: str
+    status: int
+    reason: str
+
+
+class BulkDeleteRequest(_Model):
+    note_ids: List[str]
+
+
+class BulkDeleteResponse(_Model):
+    deleted: List[str]
+    failed: List[FailedItem]
 
 
 class JobStatusResponse(_Model):

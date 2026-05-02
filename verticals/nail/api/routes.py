@@ -19,7 +19,7 @@ from verticals.nail.service.history_service import HistoryService
 from verticals.nail.service.package_service import PackageService
 from verticals.nail.service.case_service import CaseService
 
-from .schemas import HealthResponse, JobCreatedResponse, JobStatusResponse
+from .schemas import HealthResponse, JobCreatedResponse, JobStatusResponse, BulkDeleteRequest, BulkDeleteResponse, FailedItem
 
 
 router = APIRouter()
@@ -138,6 +138,61 @@ def delete_note(vertical: str, note_id: str):
         raise HTTPException(status_code=500, detail=str(exc))
 
     return None
+
+
+@router.post("/api/verticals/{vertical}/notes/delete", response_model=BulkDeleteResponse)
+def bulk_delete_notes(vertical: str, request: BulkDeleteRequest):
+    """
+    Bulk delete note packages by note_ids.
+    Returns deleted and failed lists; partial success is allowed.
+    """
+    _require_vertical(vertical)
+
+    note_ids = request.note_ids or []
+
+    # Deduplicate while preserving first-occurrence order
+    seen = set()
+    unique_note_ids = []
+    for nid in note_ids:
+        if nid not in seen:
+            seen.add(nid)
+            unique_note_ids.append(nid)
+
+    deleted: List[str] = []
+    failed: List[FailedItem] = []
+    output_root = OUTPUT_DIR.resolve()
+
+    for note_id in unique_note_ids:
+        # Validate format
+        if not isinstance(note_id, str) or not _NOTE_ID_RE.fullmatch(note_id or ""):
+            failed.append(FailedItem(note_id=str(note_id), status=400, reason="invalid_note_id"))
+            continue
+        if ".." in note_id or "/" in note_id or "\\" in note_id:
+            failed.append(FailedItem(note_id=str(note_id), status=400, reason="invalid_note_id"))
+            continue
+
+        # Resolve path and verify it's within output root
+        note_dir = OUTPUT_DIR / note_id
+        try:
+            resolved = note_dir.resolve()
+            resolved.relative_to(output_root)
+        except ValueError:
+            failed.append(FailedItem(note_id=str(note_id), status=403, reason="invalid_path"))
+            continue
+
+        # Check existence
+        if not resolved.exists() or not resolved.is_dir():
+            failed.append(FailedItem(note_id=str(note_id), status=404, reason="not_found"))
+            continue
+
+        # Attempt deletion
+        try:
+            shutil.rmtree(resolved)
+            deleted.append(str(note_id))
+        except OSError as exc:
+            failed.append(FailedItem(note_id=str(note_id), status=500, reason="delete_failed"))
+
+    return BulkDeleteResponse(deleted=deleted, failed=failed)
 
 
 # ── /api/verticals/{vertical}/cases ─────────────────────────────────────────
