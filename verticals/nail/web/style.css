@@ -861,6 +861,28 @@ button:disabled {
   color: #52525b;
   border: 1px solid var(--border);
 }
+.recent-job-platform,
+.recent-job-type,
+.recent-job-scenario {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  opacity: 0.85;
+}
+button:disabled.recent-job-open {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button:disabled.recent-job-open:hover {
+  border-color: var(--border);
+  box-shadow: none;
+}
 .recent-job-brief {
   color: var(--text);
   flex: 1 1 240px;

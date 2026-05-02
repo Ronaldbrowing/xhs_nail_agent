@@ -103,6 +103,22 @@
     },
   };
 
+  const PLATFORM_LABELS = {
+    xhs: "小红书",
+  };
+  const CONTENT_TYPE_LABELS = {
+    image_text_note: "图文笔记",
+    video_note: "视频笔记",
+  };
+  function labelForPlatform(platform) {
+    if (!platform) return "未知平台";
+    return PLATFORM_LABELS[platform] || platform;
+  }
+  function labelForContentType(type) {
+    if (!type) return "未知类型";
+    return CONTENT_TYPE_LABELS[type] || type;
+  }
+
   let selectedVertical = APP_CONFIG.currentVertical;
   let availableVerticals = [];
   let serverHistoryItems = [];
@@ -952,6 +968,26 @@
     modeLabel.textContent = item.has_package ? "可回放" : "无结果包";
     meta.appendChild(modeLabel);
 
+    // content_platform badge
+    const platformBadge = document.createElement("span");
+    platformBadge.className = "recent-job-platform";
+    platformBadge.textContent = labelForPlatform(item.content_platform);
+    meta.appendChild(platformBadge);
+
+    // content_type tag
+    const typeTag = document.createElement("span");
+    typeTag.className = "recent-job-type";
+    typeTag.textContent = labelForContentType(item.content_type);
+    meta.appendChild(typeTag);
+
+    // scenario badge (if present)
+    if (item.scenario && typeof item.scenario === "string" && item.scenario.trim()) {
+      const scenarioTag = document.createElement("span");
+      scenarioTag.className = "recent-job-scenario";
+      scenarioTag.textContent = item.scenario.trim();
+      meta.appendChild(scenarioTag);
+    }
+
     const summary = document.createElement("div");
     summary.className = "recent-job-summary";
 
@@ -970,14 +1006,19 @@
     const actions = document.createElement("div");
     actions.className = "recent-job-actions";
 
+    const canReplay = !!(item.note_id && item.has_package);
     const openButton = document.createElement("button");
     openButton.type = "button";
     openButton.className = "secondary-button recent-job-open";
-    openButton.textContent = "回放预览";
-    openButton.disabled = !item.note_id;
-    openButton.addEventListener("click", function () {
-      replayHistoryItem(item);
-    });
+    openButton.textContent = canReplay ? "回放预览" : "无法回放";
+    openButton.disabled = !canReplay;
+    if (!canReplay) {
+      openButton.title = "该记录没有结果包，无法回放";
+    } else {
+      openButton.addEventListener("click", function () {
+        replayHistoryItem(item);
+      });
+    }
 
     actions.appendChild(openButton);
     article.appendChild(meta);
