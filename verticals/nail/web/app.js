@@ -129,6 +129,7 @@
   let historyError = null;
   let historyRequestToken = 0;
   let currentReplayNoteId = null;
+  let replayToken = 0; // incremented on each replayHistoryItem call; guards against stale responses
   let caseLibraryLoading = false;
   let caseLibraryError = null;
   let selectedCase = null;
@@ -1276,6 +1277,7 @@
       return;
     }
     activeJobToken += 1;
+    const thisReplayToken = ++replayToken;
     previewState = "history_replay";
     previewFailedSummary = null;
     currentPreviewData = null;
@@ -1283,6 +1285,10 @@
     applyStatus("running", "正在加载历史结果包");
     try {
       const packageData = await fetchJson(buildVerticalPackageUrl(item.note_id));
+      // Guard: stale response from an older replay — skip rendering
+      if (thisReplayToken !== replayToken) {
+        return;
+      }
       const generateImages = Array.isArray(packageData.pages) && packageData.pages.some(function (page) {
         return Boolean(normalizeOutputImagePath(page.image_path));
       });
@@ -1305,6 +1311,10 @@
         )
       );
     } catch (error) {
+      // Guard: stale response
+      if (thisReplayToken !== replayToken) {
+        return;
+      }
       applyStatus("failed", "历史内容加载失败");
       resultMeta.textContent = "这条历史内容暂时无法回放，请稍后刷新历史后重试。";
       setJobMeta(
