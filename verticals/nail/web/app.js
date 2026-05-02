@@ -128,6 +128,7 @@
   let historyLoading = false;
   let historyError = null;
   let historyRequestToken = 0;
+  let currentReplayNoteId = null;
   let caseLibraryLoading = false;
   let caseLibraryError = null;
   let selectedCase = null;
@@ -535,6 +536,28 @@
     }
   }
 
+  async function deleteHistoryItem(item) {
+    const confirmed = window.confirm("确定删除该历史记录？删除后不可恢复。");
+    if (!confirmed) {
+      return;
+    }
+    try {
+      const url = buildVerticalNotesUrl() + "/" + encodeURIComponent(item.note_id);
+      const response = await fetch(url, { method: "DELETE" });
+      if (!response.ok) {
+        console.error("Failed to delete history item", response.status);
+        return;
+      }
+      if (currentReplayNoteId === item.note_id) {
+        currentReplayNoteId = null;
+        clearResults();
+      }
+      loadServerHistory();
+    } catch (error) {
+      console.error("Failed to delete history item", error);
+    }
+  }
+
   function buildProgressDetail(stateKey, detailText, job) {
     const state = APP_CONFIG.jobStatusMap[stateKey] || APP_CONFIG.jobStatusMap.idle;
     const segments = [];
@@ -743,6 +766,7 @@
     pagesGrid.innerHTML = "";
     currentPreviewData = null;
     previewState = "empty";
+    currentReplayNoteId = null;
     previewFailedSummary = null;
     showResultEmptyState();
     resultMeta.textContent = "生成完成后，这里会展示标题、正文、标签和多页内容结构。";
@@ -1117,6 +1141,21 @@
 
     actions.appendChild(exportJsonBtn);
     actions.appendChild(exportMdBtn);
+
+    const canDelete = !!(item.note_id);
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "secondary-button history-delete-button";
+    deleteBtn.textContent = "删除";
+    deleteBtn.disabled = !canDelete;
+    if (canDelete) {
+      deleteBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        deleteHistoryItem(item);
+      });
+    }
+
+    actions.appendChild(deleteBtn);
     article.appendChild(meta);
     article.appendChild(summary);
     article.appendChild(actions);
@@ -1240,6 +1279,7 @@
     previewState = "history_replay";
     previewFailedSummary = null;
     currentPreviewData = null;
+    currentReplayNoteId = item.note_id;
     applyStatus("running", "正在加载历史结果包");
     try {
       const packageData = await fetchJson(buildVerticalPackageUrl(item.note_id));

@@ -115,6 +115,31 @@ def get_note_package(vertical: str, note_id: str):
     return JSONResponse(content=package)
 
 
+@router.delete("/api/verticals/{vertical}/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_note(vertical: str, note_id: str):
+    """Delete a note package directory for the given vertical and note_id."""
+    _require_vertical(vertical)
+    _reject_invalid_note_id(note_id)
+
+    note_dir = OUTPUT_DIR / note_id
+    resolved = note_dir.resolve()
+    output_root = OUTPUT_DIR.resolve()
+    try:
+        resolved.relative_to(output_root)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="invalid path")
+
+    if not resolved.exists() or not resolved.is_dir():
+        raise HTTPException(status_code=404, detail="note not found")
+
+    try:
+        shutil.rmtree(resolved)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return None
+
+
 # ── /api/verticals/{vertical}/cases ─────────────────────────────────────────
 
 

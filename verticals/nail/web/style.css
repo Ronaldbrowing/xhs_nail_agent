@@ -899,6 +899,9 @@ button:disabled.recent-job-open:hover {
 .recent-job-delete {
   padding: 8px 12px;
 }
+.history-delete-button {
+  padding: 8px 12px;
+}
 
 /* History filter bar */
 .filter-bar {
