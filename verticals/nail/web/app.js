@@ -471,6 +471,70 @@
     }, null, 2);
   }
 
+  function triggerDownload(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  async function exportHistoryItemAsJson(item, button) {
+    const originalText = button.textContent;
+    let failed = false;
+    button.disabled = true;
+    button.textContent = "导出中";
+    try {
+      const response = await fetchJson(buildVerticalPackageUrl(item.note_id));
+      const packageData = await response.json();
+      const jsonStr = buildJson(packageData);
+      triggerDownload(jsonStr, item.note_id + "_export.json", "application/json;charset=utf-8");
+    } catch (error) {
+      failed = true;
+    } finally {
+      if (failed) {
+        button.textContent = "导出失败";
+        setTimeout(function () {
+          button.textContent = originalText;
+          button.disabled = false;
+        }, 1500);
+      } else {
+        button.textContent = originalText;
+        button.disabled = false;
+      }
+    }
+  }
+
+  async function exportHistoryItemAsMarkdown(item, button) {
+    const originalText = button.textContent;
+    let failed = false;
+    button.disabled = true;
+    button.textContent = "导出中";
+    try {
+      const response = await fetchJson(buildVerticalPackageUrl(item.note_id));
+      const packageData = await response.json();
+      const mdStr = buildMarkdown(packageData);
+      triggerDownload(mdStr, item.note_id + "_export.md", "text/markdown;charset=utf-8");
+    } catch (error) {
+      failed = true;
+    } finally {
+      if (failed) {
+        button.textContent = "导出失败";
+        setTimeout(function () {
+          button.textContent = originalText;
+          button.disabled = false;
+        }, 1500);
+      } else {
+        button.textContent = originalText;
+        button.disabled = false;
+      }
+    }
+  }
+
   function buildProgressDetail(stateKey, detailText, job) {
     const state = APP_CONFIG.jobStatusMap[stateKey] || APP_CONFIG.jobStatusMap.idle;
     const segments = [];
@@ -1021,6 +1085,38 @@
     }
 
     actions.appendChild(openButton);
+
+    const canExport = !!(item.note_id && item.has_package);
+    const exportJsonBtn = document.createElement("button");
+    exportJsonBtn.type = "button";
+    exportJsonBtn.className = "secondary-button recent-job-export";
+    exportJsonBtn.textContent = "导出 JSON";
+    exportJsonBtn.disabled = !canExport;
+    if (!canExport) {
+      exportJsonBtn.title = "该记录没有结果包，无法导出";
+    } else {
+      exportJsonBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        exportHistoryItemAsJson(item, exportJsonBtn);
+      });
+    }
+
+    const exportMdBtn = document.createElement("button");
+    exportMdBtn.type = "button";
+    exportMdBtn.className = "secondary-button recent-job-export";
+    exportMdBtn.textContent = "导出 Markdown";
+    exportMdBtn.disabled = !canExport;
+    if (!canExport) {
+      exportMdBtn.title = "该记录没有结果包，无法导出";
+    } else {
+      exportMdBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        exportHistoryItemAsMarkdown(item, exportMdBtn);
+      });
+    }
+
+    actions.appendChild(exportJsonBtn);
+    actions.appendChild(exportMdBtn);
     article.appendChild(meta);
     article.appendChild(summary);
     article.appendChild(actions);
