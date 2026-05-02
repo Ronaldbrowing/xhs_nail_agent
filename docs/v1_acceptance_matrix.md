@@ -2,7 +2,7 @@
 
 - **来源文档**：docs/vertical_content_studio_mvp_v1_requirements.md
 - **生成日期**：2026-04-30
-- **当前阶段**：Milestone 1 已完成，Milestone 2 已验收通过，Milestone 3 Slice A/B 已完成，Milestone 4 Slice A/B/C/D 已完成，Milestone 5 Slice A 已完成
+- **当前阶段**：Milestone 1 已完成，Milestone 2 已验收通过，Milestone 3 Slice A/B 已完成，Milestone 4 Slice A/B/C/D 已完成，Milestone 5 Slice A/B 已完成
 - **状态说明**：本文件是从 v1.md 派生的执行跟踪矩阵，不替代 v1.md。
 
 ## 概述
@@ -35,6 +35,7 @@
 | FR-017 | 空状态与加载状态 | 历史为空时展示空状态；案例为空时展示空状态；加载中展示 loading；package 损坏展示损坏提示 | N/A（UI 状态） | All | N/A | Milestone 3 | P2 | 已覆盖 | 各模块空状态/加载状态展示正确 | 部分满足 | History 与 Preview 的 empty-state 互斥已修复；M4 Slice D 优化 Preview 空态文案，空态下不暴露可误触的复制按钮；Progress 会在 running/completed/failed/replay 间切换清晰状态；Cases 空态的全量人工点验仍可继续补充 |
 | FR-018 | 基础文档与验收报告 | 每个 Milestone 输出验收报告；报告记录 commit、测试结果、手动验收、范围偏差 | N/A（文档） | N/A | N/A | Milestone 0 | P2 | N/A | 每个 Milestone 有验收报告 | Milestone 0 进行中 | 本阶段目标 |
 | FR-019 | History 搜索、过滤与排序 | 支持 note_id 搜索；支持 selected_title 搜索（大小写不敏感）；支持 has_package 全部 / 有结果包 / 无结果包筛选；支持 created_at 升序 / 降序排序；搜索或筛选无结果时显示"没有匹配的历史内容"；sort 参数不参与 filter active 空状态判断；historyRequestToken 防止过期请求覆盖最新搜索结果；history_replay 与 M4 copy 功能不回退 | GET /api/verticals/{vertical}/notes（支持 search/has_package/sort params） | History 模块 | History Service | Milestone 5 | P0 | 已覆盖 | 搜索 note_id 片段仅显示匹配记录；搜索 selected_title 片段仅显示匹配记录；清空搜索后恢复；has_package=true 时仅显示有包记录；has_package=false 时仅显示无包记录；sort=created_at_desc 时新记录在前；sort=created_at_asc 时旧记录在前；无匹配结果显示"没有匹配的历史内容"；点击回放后 history_replay 状态正常，6 个复制按钮可用 | 已完成 | 后端 `HistoryService.list_notes` 支持 search/has_package/sort 参数；前端 filter bar 含搜索框、has_package 下拉、sort 下拉；`buildVerticalNotesUrl` 使用 URLSearchParams；`isHistoryFilterActive` 仅将 search 和 has_package（不含 sort）视为过滤条件；`historyRequestToken` 自增防乱序；smoke test 9/9 通过；相关 commit: 0df3449 |
+| FR-020 | History Item 增强展示与回放保护 | History item 显示 content_platform badge（xhs → 小红书）；显示 content_type tag（image_text_note → 图文笔记，video_note → 视频笔记）；未知值显示原始值，空值显示"未知平台 / 未知类型"；scenario 非空字符串时显示 badge，缺失时不渲染；has_package=true 时回放按钮可点击；has_package=false 时回放按钮 disabled，文案"无法回放"，title"该记录没有结果包，无法回放"，且不绑定 replayHistoryItem | N/A（前端渲染逻辑） | History 模块 | N/A | Milestone 5 | P0 | 已覆盖 | platform badge 显示"小红书"；type tag 显示"图文笔记"；scenario 缺失时无空白 badge；has_package=true 时"回放预览"可点击；has_package=false 时"无法回放" disabled，hover 显示"该记录没有结果包，无法回放"；搜索/筛选/排序回归通过；history_replay + 6 个复制按钮回归通过 | 已完成 | `labelForPlatform`/`labelForContentType` 映射；scenario 条件渲染；`canReplay = !!(item.note_id && item.has_package)` 控制 disabled 与事件绑定；CSS `button:disabled.recent-job-open` 样式；smoke test API 9/9 通过；代码级复核 12/12 通过；相关 commit: e45c750 |
 
 ---
 
@@ -86,6 +87,7 @@
 | 2026-05-01 | Codex/Hermes | M4 Slice A/B/C 完成：Preview 复制能力（标题/正文/标签/完整内容）、Markdown 导出、JSON 导出；FR-005 已完成；FR-016 已完成；相关 commits: ecffd35, 34bc2ac, d142d58 |
 | 2026-05-02 | Codex/Hermes | M4 Slice D 完成：Preview 状态优化（empty/generating/failed/quick_preview/history_replay 五态）；空态无复制按钮误触；生成中显示"正在生成内容预览"；失败态保留 error_summary；history_replay 显示回放文案；`currentPreviewData` 在非内容态清空；`activeJobToken` 保护 replay 不被 active job 异步覆盖；删除未调用 `applyPreviewState` 死代码；相关 commit: 975fc02 |
 | 2026-05-02 | Codex/Hermes | M5 Slice A 完成：History 搜索/过滤/排序（search、has_package、sort 参数）；filter bar UI；`historyRequestToken` 防乱序；`isHistoryFilterActive` 仅含 search 和 has_package；smoke test 9/9 通过；相关 commit: 0df3449 |
+| 2026-05-02 | Codex/Hermes | M5 Slice B 完成：History item 增强展示（platform badge、type tag、scenario badge）；回放保护（has_package=false 时 disabled）；`canReplay` guard 分离 disabled 与事件绑定；smoke test API 9/9 通过；代码级复核 12/12 通过；相关 commit: e45c750 |
 
 ---
 
