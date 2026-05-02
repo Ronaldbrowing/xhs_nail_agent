@@ -34,12 +34,22 @@ class HistoryService:
 
         self.output_root = output_root or OUTPUT_DIR
 
-    def list_notes(self, vertical: str) -> List[Dict[str, Any]]:
+    def list_notes(
+        self,
+        vertical: str,
+        search: Optional[str] = None,
+        has_package: Optional[str] = None,
+        sort: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """
-        List all note packages for a given vertical.
+        List all note packages for a given vertical with optional search, filter, and sort.
 
         Args:
             vertical: The vertical to filter by.
+            search: Optional string to fuzzy-match against note_id and selected_title.
+            has_package: Optional filter — "true" (has package), "false" (no package), "all" (no filter).
+            sort: Optional sort order — "created_at_desc" (newest first) or "created_at_asc" (oldest first).
+                  Defaults to "created_at_desc".
 
         Returns:
             List of note history items with field_sources标记.
@@ -92,9 +102,24 @@ class HistoryService:
 
             status = data.get("status", "unknown")
             pages = data.get("pages", [])
-            has_package = len(pages) > 0 if pages else False
+            has_pkg = len(pages) > 0 if pages else False
 
             selected_title = data.get("selected_title") or data.get("title")
+
+            # --- Search filter ---
+            if search and search.strip():
+                term = search.strip().lower()
+                title_text = (selected_title or "").lower()
+                id_text = note_id.lower()
+                if term not in title_text and term not in id_text:
+                    continue
+
+            # --- has_package filter ---
+            if has_package and has_package != "all":
+                if has_package == "true" and not has_pkg:
+                    continue
+                if has_package == "false" and has_pkg:
+                    continue
 
             items.append(
                 {
@@ -107,7 +132,7 @@ class HistoryService:
                     "selected_title": selected_title,
                     "status": status,
                     "created_at": data.get("created_at"),
-                    "has_package": has_package,
+                    "has_package": has_pkg,
                     "field_sources": {
                         "vertical": field_sources["vertical"],
                         "content_platform": source_platform,
@@ -116,7 +141,9 @@ class HistoryService:
                 }
             )
 
-        items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+        # --- Sort ---
+        sort_key = (sort == "created_at_asc")
+        items.sort(key=lambda x: x.get("created_at") or "", reverse=not sort_key)
         return items
 
     def get_total(self, vertical: str) -> int:

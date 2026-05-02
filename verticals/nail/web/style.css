@@ -877,3 +877,39 @@ button:disabled {
 .recent-job-delete {
   padding: 8px 12px;
 }
+
+/* History filter bar */
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.filter-search-input {
+  flex: 1;
+  min-width: 160px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+}
+.filter-search-input::placeholder {
+  color: var(--muted);
+}
+.filter-select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.filter-search-input:focus,
+.filter-select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

@@ -197,6 +197,18 @@
               <button id="refresh-history-button" type="button" class="ghost-button">刷新历史</button>
             </div>
             <p id="history-meta" class="section-tip">这里显示服务端历史内容，点击后会回放到下方内容预览区。</p>
+            <div id="history-filter-bar" class="filter-bar" hidden>
+              <input id="history-search-input" type="text" placeholder="搜索 note_id 或标题..." class="filter-search-input" />
+              <select id="history-has-package-filter" class="filter-select">
+                <option value="all">全部记录</option>
+                <option value="true">有结果包</option>
+                <option value="false">无结果包</option>
+              </select>
+              <select id="history-sort-select" class="filter-select">
+                <option value="created_at_desc">最新在前</option>
+                <option value="created_at_asc">最旧在前</option>
+              </select>
+            </div>
             <div id="history-empty" class="empty-state">
               <strong>还没有历史内容</strong>
               <p>当服务端存在历史 package 时，这里会显示可回放的记录。</p>

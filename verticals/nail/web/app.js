@@ -111,6 +111,7 @@
   let activeJobFromLocalStorage = null;
   let historyLoading = false;
   let historyError = null;
+  let historyRequestToken = 0;
   let caseLibraryLoading = false;
   let caseLibraryError = null;
   let selectedCase = null;
@@ -146,6 +147,10 @@
   const historyMeta = document.getElementById("history-meta");
   const historyEmpty = document.getElementById("history-empty");
   const historyList = document.getElementById("history-list");
+  const historyFilterBar = document.getElementById("history-filter-bar");
+  const historySearchInput = document.getElementById("history-search-input");
+  const historyHasPackageFilter = document.getElementById("history-has-package-filter");
+  const historySortSelect = document.getElementById("history-sort-select");
   const recentJobsTitle = document.getElementById("recent-jobs-title");
   const caseLibraryPanel = document.getElementById("case-library-panel");
   const caseLibraryMeta = document.getElementById("case-library-meta");
@@ -981,6 +986,12 @@
     return article;
   }
 
+  function isHistoryFilterActive() {
+    const search = historySearchInput && historySearchInput.value.trim();
+    const hasPkg = historyHasPackageFilter && historyHasPackageFilter.value;
+    return !!(search || (hasPkg && hasPkg !== "all"));
+  }
+
   function renderServerHistory() {
     if (!historyPanel || !historyList || !historyEmpty || !historyMeta) {
       return;
@@ -988,6 +999,16 @@
 
     historyPanel.hidden = false;
     historyList.innerHTML = "";
+
+    // Show filter bar whenever there's any data or any filter is set
+    const hasItems = serverHistoryItems.length > 0;
+    const filterActive = isHistoryFilterActive();
+    if (hasItems || filterActive) {
+      if (historyFilterBar) historyFilterBar.hidden = false;
+    } else {
+      if (historyFilterBar) historyFilterBar.hidden = true;
+    }
+
     if (historyLoading) {
       historyEmpty.hidden = true;
       historyList.hidden = true;
@@ -1000,16 +1021,22 @@
       historyList.hidden = true;
       historyMeta.textContent = "历史内容暂时加载失败，请稍后点击刷新历史重试。";
       historyEmpty.querySelector("strong").textContent = "历史内容加载失败";
-      historyEmpty.querySelector("p").textContent = "服务端历史暂时不可用，请稍后点击“刷新历史”重试。";
+      historyEmpty.querySelector("p").textContent = "服务端历史暂时不可用，请稍后点击「刷新历史」重试。";
       return;
     }
 
-    historyEmpty.querySelector("strong").textContent = "还没有历史内容";
-    historyEmpty.querySelector("p").textContent = "当服务端存在历史 package 时，这里会显示可回放的记录。";
     if (!serverHistoryItems.length) {
       historyEmpty.hidden = false;
       historyList.hidden = true;
-      historyMeta.textContent = "这里显示服务端历史内容，点击后会回放到下方内容预览区。";
+      if (filterActive) {
+        historyEmpty.querySelector("strong").textContent = "没有匹配的历史内容";
+        historyEmpty.querySelector("p").textContent = "请尝试调整搜索条件或清除筛选。";
+        historyMeta.textContent = "没有匹配的历史内容，请调整搜索条件。";
+      } else {
+        historyEmpty.querySelector("strong").textContent = "还没有历史内容";
+        historyEmpty.querySelector("p").textContent = "当服务端存在历史 package 时，这里会显示可回放的记录。";
+        historyMeta.textContent = "这里显示服务端历史内容，点击后会回放到下方内容预览区。";
+      }
       return;
     }
 
@@ -1022,27 +1049,42 @@
   }
 
   async function loadServerHistory() {
+    const token = ++historyRequestToken;
     if (!selectedVertical) {
       serverHistoryItems = [];
       historyLoading = false;
       historyError = null;
-      renderServerHistory();
+      if (historyRequestToken === token) {
+        renderServerHistory();
+      }
       return;
     }
     historyLoading = true;
     historyError = null;
-    renderServerHistory();
+    if (historyRequestToken === token) {
+      renderServerHistory();
+    }
     try {
       const response = await fetchJson(buildVerticalNotesUrl());
+      if (historyRequestToken !== token) {
+        return;
+      }
       serverHistoryItems = Array.isArray(response.items) ? response.items : [];
       historyLoading = false;
       historyError = null;
-      renderServerHistory();
+      if (historyRequestToken === token) {
+        renderServerHistory();
+      }
     } catch (error) {
+      if (historyRequestToken !== token) {
+        return;
+      }
       serverHistoryItems = [];
       historyLoading = false;
       historyError = error;
-      renderServerHistory();
+      if (historyRequestToken === token) {
+        renderServerHistory();
+      }
       setJobMeta({
         note: "history load failed",
         vertical: selectedVertical,
@@ -1289,7 +1331,16 @@
   }
 
   function buildVerticalNotesUrl() {
-    return "/api/verticals/" + encodeURIComponent(selectedVertical) + "/notes";
+    const base = "/api/verticals/" + encodeURIComponent(selectedVertical) + "/notes";
+    const params = new URLSearchParams();
+    const search = historySearchInput && historySearchInput.value.trim();
+    const hasPkg = historyHasPackageFilter && historyHasPackageFilter.value;
+    const sort = historySortSelect && historySortSelect.value;
+    if (search) params.set("search", search);
+    if (hasPkg && hasPkg !== "all") params.set("has_package", hasPkg);
+    if (sort && sort !== "created_at_desc") params.set("sort", sort);
+    const qs = params.toString();
+    return qs ? base + "?" + qs : base;
   }
 
   function buildVerticalPackageUrl(noteId) {
@@ -1637,6 +1688,21 @@
   if (refreshHistoryButton) {
     refreshHistoryButton.addEventListener("click", async function () {
       await loadServerHistory();
+    });
+  }
+  if (historySearchInput) {
+    historySearchInput.addEventListener("input", function () {
+      loadServerHistory();
+    });
+  }
+  if (historyHasPackageFilter) {
+    historyHasPackageFilter.addEventListener("change", function () {
+      loadServerHistory();
+    });
+  }
+  if (historySortSelect) {
+    historySortSelect.addEventListener("change", function () {
+      loadServerHistory();
     });
   }
   continueButton.addEventListener("click", function () {
