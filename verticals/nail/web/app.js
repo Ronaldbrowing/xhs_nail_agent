@@ -549,11 +549,7 @@
         console.error("Failed to delete history item", response.status);
         return;
       }
-      if (currentReplayNoteId === item.note_id) {
-        currentReplayNoteId = null;
-        clearResults();
-      }
-      loadServerHistory();
+      window.location.reload();
     } catch (error) {
       console.error("Failed to delete history item", error);
     }
