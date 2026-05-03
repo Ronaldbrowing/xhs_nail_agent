@@ -2063,7 +2063,7 @@
       applyStatus("queued");
       setJobMeta(buildJobMetaPayload({}, payload));
 
-      const created = await fetchJson("/api/nail/notes", {
+      const created = await fetchJson("/api/verticals/" + encodeURIComponent(selectedVertical) + "/notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

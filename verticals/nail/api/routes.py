@@ -278,13 +278,13 @@ def _compute_elapsed_seconds(job: Dict[str, Any]) -> Optional[float]:
     return round(max((end - started).total_seconds(), 0.0), 3)
 
 
-def _validate_nail_reference_source(request: NailNoteCreateRequest) -> None:
+def _validate_nail_reference_source(request: NailNoteCreateRequest, vertical: str = "nail") -> None:
     if request.reference_source != "case_id":
         return
 
     svc = _get_case_service()
     try:
-        svc.get_case("nail", request.case_id or "")
+        svc.get_case(vertical, request.case_id or "")
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"case_id not found or has no image: {request.case_id}")
     except ValueError as exc:
@@ -362,11 +362,28 @@ async def upload_reference_image(file: UploadFile = File(...)):
     return JSONResponse(await _store_reference_image_upload(file))
 
 
-@router.post("/api/nail/notes", response_model=JobCreatedResponse, status_code=status.HTTP_202_ACCEPTED)
-def create_note(request: NailNoteCreateRequest) -> JobCreatedResponse:
+@router.post("/api/verticals/{vertical}/notes", response_model=JobCreatedResponse, status_code=status.HTTP_202_ACCEPTED)
+def create_vertical_note(vertical: str, request: NailNoteCreateRequest) -> JobCreatedResponse:
+    """Create a new note for the specified vertical."""
     import uuid
 
-    _validate_nail_reference_source(request)
+    _require_vertical(vertical)
+    _validate_nail_reference_source(request, vertical=vertical)
+    job_id = "job_{token}".format(token=uuid.uuid4().hex[:12])
+    payload = request.as_dict()
+    payload["vertical"] = vertical
+    create_job(job_id, payload=payload, status="queued")
+    worker = threading.Thread(target=_run_create_job, args=(job_id, request), daemon=True, name="nail-note-{job_id}".format(job_id=job_id))
+    worker.start()
+    return JobCreatedResponse(job_id=job_id, status="queued")
+
+
+@router.post("/api/nail/notes", response_model=JobCreatedResponse, status_code=status.HTTP_202_ACCEPTED)
+def create_note(request: NailNoteCreateRequest) -> JobCreatedResponse:
+    """Create a new nail note (legacy endpoint). Prefer POST /api/verticals/{vertical}/notes."""
+    import uuid
+
+    _validate_nail_reference_source(request, vertical="nail")
     job_id = "job_{token}".format(token=uuid.uuid4().hex[:12])
     payload = request.as_dict()
     create_job(job_id, payload=payload, status="queued")
