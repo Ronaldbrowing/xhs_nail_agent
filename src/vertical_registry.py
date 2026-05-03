@@ -67,6 +67,8 @@ class VerticalDefinition:
         workflow_id: Optional[str] = None,
         case_enabled: bool = False,
         reference_image_enabled: bool = False,
+        platform_labels: Optional[Dict[str, str]] = None,
+        content_type_labels: Optional[Dict[str, str]] = None,
     ):
         self.vertical = vertical
         self.display_name = display_name
@@ -78,6 +80,8 @@ class VerticalDefinition:
         self.workflow_id = workflow_id
         self.case_enabled = case_enabled
         self.reference_image_enabled = reference_image_enabled
+        self.platform_labels = platform_labels or {}
+        self.content_type_labels = content_type_labels or {}
 
     def to_dict(self) -> Dict:
         return {
@@ -91,6 +95,8 @@ class VerticalDefinition:
             "workflow_id": self.workflow_id,
             "case_enabled": self.case_enabled,
             "reference_image_enabled": self.reference_image_enabled,
+            "platform_labels": self.platform_labels,
+            "content_type_labels": self.content_type_labels,
         }
 
 
@@ -122,6 +128,8 @@ class VerticalRegistry:
                 workflow_id="nail_note_workflow_v1",
                 case_enabled=True,
                 reference_image_enabled=True,
+                platform_labels={"xhs": "小红书"},
+                content_type_labels={"image_text_note": "图文笔记"},
             )
         )
 

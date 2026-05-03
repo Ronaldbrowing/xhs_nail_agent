@@ -5,6 +5,8 @@
     verticals: {
       nail: {
         label: "小红书美甲图文",
+        platform_labels: { xhs: "小红书" },
+        content_type_labels: { image_text_note: "图文笔记" },
         styleOptions: [
           {
             value: "",
@@ -112,11 +114,15 @@
   };
   function labelForPlatform(platform) {
     if (!platform) return "未知平台";
-    return PLATFORM_LABELS[platform] || platform;
+    const labels = currentVertical && currentVertical.platform_labels;
+    if (labels && labels[platform]) return labels[platform];
+    return PLATFORM_LABELS[platform] || ("未知:" + platform);
   }
   function labelForContentType(type) {
     if (!type) return "未知类型";
-    return CONTENT_TYPE_LABELS[type] || type;
+    const labels = currentVertical && currentVertical.content_type_labels;
+    if (labels && labels[type]) return labels[type];
+    return CONTENT_TYPE_LABELS[type] || ("未知:" + type);
   }
 
   let selectedVertical = APP_CONFIG.currentVertical;
@@ -227,6 +233,8 @@
       : (verticalDefinition && verticalDefinition.vertical) || selectedVertical;
     return {
       label: label,
+      platform_labels: (verticalDefinition && verticalDefinition.platform_labels) || {},
+      content_type_labels: (verticalDefinition && verticalDefinition.content_type_labels) || {},
       styleOptions: [
         {
           value: "",
