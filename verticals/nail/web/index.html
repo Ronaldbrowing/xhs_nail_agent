@@ -209,6 +209,13 @@
                 <option value="created_at_asc">最旧在前</option>
               </select>
             </div>
+            <div id="history-bulk-actions" class="history-bulk-actions" hidden>
+              <label class="bulk-select-all">
+                <input id="bulk-select-all-checkbox" type="checkbox" />
+                <span>全选</span>
+              </label>
+              <button id="bulk-delete-button" type="button" class="secondary-button history-bulk-delete-button" disabled>批量删除</button>
+            </div>
             <div id="history-empty" class="empty-state">
               <strong>还没有历史内容</strong>
               <p>当服务端存在历史 package 时，这里会显示可回放的记录。</p>

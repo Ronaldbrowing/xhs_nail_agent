@@ -903,7 +903,71 @@ button:disabled.recent-job-open:hover {
   padding: 8px 12px;
 }
 
-/* History filter bar */
+/* History bulk actions */
+.history-bulk-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.bulk-select-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.bulk-select-all input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.history-bulk-delete-button {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* History select checkbox — placed inside .recent-job-item */
+.history-select-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* History list layout: checkbox + grid content */
+.recent-job-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 8px 10px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  align-items: start;
+}
+.recent-job-item:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(183, 110, 121, 0.1);
+}
+.recent-job-meta,
+.recent-job-summary,
+.recent-job-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
 .filter-bar {
   display: flex;
   gap: 8px;

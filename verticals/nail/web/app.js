@@ -130,6 +130,7 @@
   let historyRequestToken = 0;
   let currentReplayNoteId = null;
   let replayToken = 0; // incremented on each replayHistoryItem call; guards against stale responses
+  let selectedNoteIds = new Set(); // selected note_ids for bulk delete
   let caseLibraryLoading = false;
   let caseLibraryError = null;
   let selectedCase = null;
@@ -169,6 +170,9 @@
   const historySearchInput = document.getElementById("history-search-input");
   const historyHasPackageFilter = document.getElementById("history-has-package-filter");
   const historySortSelect = document.getElementById("history-sort-select");
+  const bulkSelectAllCheckbox = document.getElementById("bulk-select-all-checkbox");
+  const bulkDeleteButton = document.getElementById("bulk-delete-button");
+  const historyBulkActions = document.getElementById("history-bulk-actions");
   const recentJobsTitle = document.getElementById("recent-jobs-title");
   const caseLibraryPanel = document.getElementById("case-library-panel");
   const caseLibraryMeta = document.getElementById("case-library-meta");
@@ -553,6 +557,64 @@
     } catch (error) {
       console.error("Failed to delete history item", error);
     }
+  }
+
+  async function bulkDeleteSelectedNotes() {
+    if (selectedNoteIds.size === 0) {
+      return;
+    }
+    const count = selectedNoteIds.size;
+    const confirmed = window.confirm("确定删除选中的 " + count + " 条历史记录？删除后不可恢复。");
+    if (!confirmed) {
+      return;
+    }
+    try {
+      const url = buildVerticalNotesUrl() + "/delete";
+      const noteIdsArray = Array.from(selectedNoteIds);
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note_ids: noteIdsArray }),
+      });
+      if (!response.ok) {
+        console.error("Bulk delete failed", response.status);
+        return;
+      }
+      const result = await response.json();
+      if (result.deleted && result.deleted.length > 0) {
+        window.location.reload();
+      } else if (result.failed && result.failed.length > 0) {
+        console.error("Bulk delete completed with failures:", result.failed);
+      }
+    } catch (error) {
+      console.error("Failed to bulk delete history items", error);
+    }
+  }
+
+  function updateBulkDeleteButton() {
+    if (!bulkDeleteButton) return;
+    const count = selectedNoteIds.size;
+    if (count === 0) {
+      bulkDeleteButton.disabled = true;
+      bulkDeleteButton.textContent = "批量删除";
+    } else {
+      bulkDeleteButton.disabled = false;
+      bulkDeleteButton.textContent = "删除选中（" + count + "）";
+    }
+  }
+
+  function updateBulkSelectAllState() {
+    if (!bulkSelectAllCheckbox) return;
+    const selectableItems = serverHistoryItems.filter(function (item) { return !!item.note_id; });
+    if (selectableItems.length === 0) {
+      bulkSelectAllCheckbox.checked = false;
+      bulkSelectAllCheckbox.indeterminate = false;
+      return;
+    }
+    const allSelected = selectableItems.every(function (item) { return selectedNoteIds.has(item.note_id); });
+    const someSelected = selectableItems.some(function (item) { return selectedNoteIds.has(item.note_id); });
+    bulkSelectAllCheckbox.checked = allSelected;
+    bulkSelectAllCheckbox.indeterminate = someSelected && !allSelected;
   }
 
   function buildProgressDetail(stateKey, detailText, job) {
@@ -1035,6 +1097,24 @@
     article.className = "recent-job-item";
     article.dataset.noteId = item.note_id;
 
+    // Checkbox for bulk selection
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "history-select-checkbox";
+    checkbox.dataset.noteId = item.note_id;
+    if (selectedNoteIds.has(item.note_id)) {
+      checkbox.checked = true;
+    }
+    checkbox.addEventListener("change", function () {
+      if (this.checked) {
+        selectedNoteIds.add(item.note_id);
+      } else {
+        selectedNoteIds.delete(item.note_id);
+      }
+      updateBulkDeleteButton();
+      updateBulkSelectAllState();
+    });
+
     const meta = document.createElement("div");
     meta.className = "recent-job-meta";
 
@@ -1156,6 +1236,7 @@
     article.appendChild(meta);
     article.appendChild(summary);
     article.appendChild(actions);
+    article.insertBefore(checkbox, article.firstChild);
     return article;
   }
 
@@ -1181,6 +1262,15 @@
     } else {
       if (historyFilterBar) historyFilterBar.hidden = true;
     }
+
+    // Show bulk actions when there are selectable items
+    const selectableItems = serverHistoryItems.filter(function (item) { return !!item.note_id; });
+    if (hasItems && selectableItems.length > 0) {
+      if (historyBulkActions) historyBulkActions.hidden = false;
+    } else {
+      if (historyBulkActions) historyBulkActions.hidden = true;
+    }
+    updateBulkSelectAllState();
 
     if (historyLoading) {
       historyEmpty.hidden = true;
@@ -1223,6 +1313,9 @@
 
   async function loadServerHistory() {
     const token = ++historyRequestToken;
+    // Clear bulk selection on every refresh
+    selectedNoteIds.clear();
+    updateBulkDeleteButton();
     if (!selectedVertical) {
       serverHistoryItems = [];
       historyLoading = false;
@@ -1886,6 +1979,25 @@
   if (historySortSelect) {
     historySortSelect.addEventListener("change", function () {
       loadServerHistory();
+    });
+  }
+  if (bulkSelectAllCheckbox) {
+    bulkSelectAllCheckbox.addEventListener("change", function () {
+      if (this.checked) {
+        serverHistoryItems.forEach(function (item) {
+          if (item.note_id) selectedNoteIds.add(item.note_id);
+        });
+      } else {
+        selectedNoteIds.clear();
+      }
+      // Re-render history list to reflect checkbox states
+      renderServerHistory();
+      updateBulkDeleteButton();
+    });
+  }
+  if (bulkDeleteButton) {
+    bulkDeleteButton.addEventListener("click", function () {
+      bulkDeleteSelectedNotes();
     });
   }
   continueButton.addEventListener("click", function () {
