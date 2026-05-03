@@ -126,6 +126,11 @@ class NailNotePackage(BaseModel):
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
     created_at: Optional[str] = None
 
+    # FR-012: 小红书内容分类字段
+    content_platform: Optional[str] = None   # 固定 "xhs"
+    content_type: Optional[str] = None        # 固定 "image_text_note"
+    vertical: Optional[str] = None            # 垂直标识，如 "nail"
+
 
 # ---------------------------------------------------------------------------
 # NailNoteUserInput - 扩展用户输入

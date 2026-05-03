@@ -59,20 +59,26 @@ def _serialize_for_json(obj, project_root: Path) -> dict:
         return obj
 
 
-def write_note_package(package: NailNotePackage, output_dir: str) -> bool:
+def write_note_package(package: NailNotePackage, output_dir: str, vertical: str = "nail") -> bool:
     """
     保存 NailNotePackage 到 note_package.json 和 archive.json。
-    
+
     Args:
         package: NailNotePackage
         output_dir: 输出目录（相对路径或绝对路径）
-    
+        vertical: 垂直领域标识，默认为 "nail"
+
     Returns:
         True 成功，False 失败
     """
     try:
         from project_paths import PROJECT_ROOT, to_project_relative
-        
+
+        # FR-012: 填充内容分类字段
+        package.content_platform = "xhs"
+        package.content_type = "image_text_note"
+        package.vertical = vertical
+
         # 确保输出目录存在
         if Path(output_dir).is_absolute():
             out_path = Path(output_dir)
