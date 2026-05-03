@@ -49,3 +49,19 @@ case_library/images/
 case_library/*.json
 case_library/poster/*/image.png
 _local_backups/
+
+# Case library generated runtime artifacts (not curated samples)
+case_library/ppt/
+case_library/product/
+case_library/infographic/
+case_library/teaching/
+case_library/poster/case_ref_test/
+case_library/poster/case_test_001/
+
+# Local runtime staging directories
+input/
+tools/
+examples/
+
+# Workspace agent config
+AGENTS.md
