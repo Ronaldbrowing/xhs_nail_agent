@@ -2,12 +2,14 @@ import re
 from typing import Any, Dict, List, Optional, Literal
 
 try:
-    from pydantic import BaseModel, ConfigDict, Field, root_validator, validator
+    from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
     PYDANTIC_V2 = True
 except ImportError:
     from pydantic import BaseModel, Field, root_validator, validator
     ConfigDict = dict
     PYDANTIC_V2 = False
+    field_validator = validator
+    model_validator = root_validator
 
 from verticals.nail.note_workflow_schemas import NailNoteUserInput
 
@@ -47,7 +49,7 @@ class NailNoteCreateRequest(_Model):
             payload["request_id"] = request_id
         return NailNoteUserInput(**payload)
 
-    @validator("style_id")
+    @field_validator("style_id")
     def validate_style_id(cls, value: Optional[str]) -> Optional[str]:
         if value in (None, ""):
             return value
@@ -55,7 +57,7 @@ class NailNoteCreateRequest(_Model):
             raise ValueError("style_id must match [A-Za-z0-9_/-]{1,64}")
         return value
 
-    @validator("reference_image_path", "case_id", "reference_source", pre=True)
+    @field_validator("reference_image_path", "case_id", "reference_source", mode="before")
     def normalize_optional_strings(cls, value):
         if value is None:
             return None
@@ -65,11 +67,12 @@ class NailNoteCreateRequest(_Model):
                 return None
         return value
 
-    @root_validator(skip_on_failure=True)
-    def validate_reference_source(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        source = values.get("reference_source")
-        reference_image_path = values.get("reference_image_path")
-        case_id = values.get("case_id")
+    @model_validator(mode="after")
+    def validate_reference_source(self) -> 'NailNoteCreateRequest':
+        # V2: mode="after" passes self (model instance)
+        source = self.reference_source
+        reference_image_path = self.reference_image_path
+        case_id = self.case_id
 
         if source is None:
             if reference_image_path and case_id:
@@ -95,10 +98,10 @@ class NailNoteCreateRequest(_Model):
             if reference_image_path:
                 raise ValueError("reference_source=case_id does not allow reference_image_path")
 
-        values["reference_source"] = source
-        values["reference_image_path"] = reference_image_path
-        values["case_id"] = case_id
-        return values
+        self.reference_source = source
+        self.reference_image_path = reference_image_path
+        self.case_id = case_id
+        return self
 
 
 class NailNotePageResponse(_Model):
