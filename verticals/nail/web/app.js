@@ -1130,7 +1130,14 @@
 
     const modeLabel = document.createElement("span");
     modeLabel.className = "recent-job-mode";
-    modeLabel.textContent = item.has_package ? "可回放" : "无结果包";
+    const hasUsableContent = item.has_body || item.has_images;
+    if (item.has_package && hasUsableContent) {
+      modeLabel.textContent = "可回放";
+    } else if (item.has_package && !hasUsableContent) {
+      modeLabel.textContent = "无内容";
+    } else {
+      modeLabel.textContent = "无结果包";
+    }
     meta.appendChild(modeLabel);
 
     // content_platform badge
@@ -1171,14 +1178,14 @@
     const actions = document.createElement("div");
     actions.className = "recent-job-actions";
 
-    const canReplay = !!(item.note_id && item.has_package);
+    const canReplay = !!(item.note_id && item.has_package && hasUsableContent);
     const openButton = document.createElement("button");
     openButton.type = "button";
     openButton.className = "secondary-button recent-job-open";
     openButton.textContent = canReplay ? "回放预览" : "无法回放";
     openButton.disabled = !canReplay;
     if (!canReplay) {
-      openButton.title = "该记录没有结果包，无法回放";
+      openButton.title = item.has_package ? "该记录无可回放内容" : "该记录没有结果包，无法回放";
     } else {
       openButton.addEventListener("click", function () {
         replayHistoryItem(item);
@@ -1187,14 +1194,14 @@
 
     actions.appendChild(openButton);
 
-    const canExport = !!(item.note_id && item.has_package);
+    const canExport = !!(item.note_id && item.has_package && item.has_body);
     const exportJsonBtn = document.createElement("button");
     exportJsonBtn.type = "button";
     exportJsonBtn.className = "secondary-button recent-job-export";
     exportJsonBtn.textContent = "导出 JSON";
     exportJsonBtn.disabled = !canExport;
     if (!canExport) {
-      exportJsonBtn.title = "该记录没有结果包，无法导出";
+      exportJsonBtn.title = item.has_package ? "该记录没有正文，无法导出" : "该记录没有结果包，无法导出";
     } else {
       exportJsonBtn.addEventListener("click", function (e) {
         e.stopPropagation();
@@ -1208,7 +1215,7 @@
     exportMdBtn.textContent = "导出 Markdown";
     exportMdBtn.disabled = !canExport;
     if (!canExport) {
-      exportMdBtn.title = "该记录没有结果包，无法导出";
+      exportMdBtn.title = item.has_package ? "该记录没有正文，无法导出" : "该记录没有结果包，无法导出";
     } else {
       exportMdBtn.addEventListener("click", function (e) {
         e.stopPropagation();

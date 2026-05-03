@@ -124,6 +124,7 @@ class NailNotePackage(BaseModel):
     success: bool = False
     partial_failure: bool = False
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
+    created_at: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

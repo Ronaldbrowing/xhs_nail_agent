@@ -9,6 +9,7 @@ Handles:
 """
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -102,9 +103,40 @@ class HistoryService:
 
             status = data.get("status", "unknown")
             pages = data.get("pages", [])
+            selected_title = data.get("selected_title") or data.get("title")
+            body = data.get("body")
+
+            # has_package 旧语义保持不变（pages 非空）
             has_pkg = len(pages) > 0 if pages else False
 
-            selected_title = data.get("selected_title") or data.get("title")
+            # created_at: 新包有值，旧包 fallback 到 file mtime
+            raw_created_at = data.get("created_at")
+            if raw_created_at:
+                created_at = raw_created_at
+                created_at_source = "package"
+            else:
+                try:
+                    mtime = package_path.stat().st_mtime
+                    created_at = datetime.fromtimestamp(mtime).isoformat()
+                    created_at_source = "file_mtime"
+                except (OSError, ValueError):
+                    created_at = None
+                    created_at_source = "unknown"
+
+            # Additive content metadata
+            has_body = bool(selected_title or body)
+            has_images = any(
+                bool(page.get("image_path") or page.get("image_url") or page.get("url"))
+                for page in pages
+                if isinstance(page, dict)
+            ) if pages else False
+
+            if not has_pkg and not has_body:
+                package_status = "no_content"
+            elif has_pkg and not has_images:
+                package_status = "empty_images"
+            else:
+                package_status = "ok"
 
             # --- Search filter ---
             if search and search.strip():
@@ -131,8 +163,12 @@ class HistoryService:
                     "brief": data.get("brief"),
                     "selected_title": selected_title,
                     "status": status,
-                    "created_at": data.get("created_at"),
+                    "created_at": created_at,
+                    "created_at_source": created_at_source,
                     "has_package": has_pkg,
+                    "has_body": has_body,
+                    "has_images": has_images,
+                    "package_status": package_status,
                     "field_sources": {
                         "vertical": field_sources["vertical"],
                         "content_platform": source_platform,

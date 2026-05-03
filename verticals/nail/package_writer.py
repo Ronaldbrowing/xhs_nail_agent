@@ -88,6 +88,10 @@ def write_note_package(package: NailNotePackage, output_dir: str) -> bool:
         package.archive_path = to_project_relative(str(arch_path))
         package.output_dir = to_project_relative(str(out_path))
 
+        # 确保 created_at 有值（新 package 写入时填充）
+        if not package.created_at:
+            package.created_at = datetime.now().isoformat()
+
         # 序列化 package（路径更新后）
         data = _serialize_for_json(package, PROJECT_ROOT)
         with open(pkg_path, "w", encoding="utf-8") as f:
