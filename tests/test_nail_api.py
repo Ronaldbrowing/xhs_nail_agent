@@ -64,6 +64,7 @@ class NailFastAPITests(unittest.TestCase):
         self.assertIn("继续查询", body)
         self.assertIn("发现上次任务", body)
         self.assertIn("最近任务", body)
+        self.assertIn("案例库", body)
         self.assertIn("/web/style.css", body)
         self.assertIn("/web/app.js", body)
 
@@ -78,7 +79,11 @@ class NailFastAPITests(unittest.TestCase):
         self.assertIn("renderPartialFailedJob", js_body)
         self.assertIn("部分完成，但结果包读取失败", js_body)
         self.assertIn('applyStatus("restored")', js_body)
-        self.assertIn("/api/nail/assets/reference-image", js_body)
+        self.assertIn("/api/verticals/", js_body)
+        self.assertIn("/reference-images", js_body)
+        self.assertIn("/cases", js_body)
+        self.assertIn("reference_source", js_body)
+        self.assertIn("loadCaseLibrary", js_body)
         self.assertIn("case_id", js_body)
         self.assertIn("上次任务记录已过期，但已根据结果包恢复内容。", js_body)
         self.assertIn("recent-job-delete", js_body)
@@ -122,6 +127,36 @@ class NailFastAPITests(unittest.TestCase):
         self.assertEqual(preview_response.status_code, 200)
         self.assertEqual(preview_response.content, self.TINY_PNG_BYTES)
 
+    def test_vertical_reference_upload_supports_png_without_absolute_paths(self):
+        response = self.client.post(
+            "/api/verticals/nail/reference-images",
+            files={"file": ("avatar.png", BytesIO(self.TINY_PNG_BYTES), "image/png")},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("reference_image_path", payload)
+        self.assertIn("preview_url", payload)
+        self.assertTrue(payload["reference_image_path"].startswith("input/reference_uploads/ref_"))
+        self.assertTrue(payload["reference_image_path"].endswith(".png"))
+        self.assertTrue(payload["preview_url"].startswith("/static/input/reference_uploads/ref_"))
+        self.assertTrue(payload["preview_url"].endswith(".png"))
+        self.assertNotIn("/Users/", payload["reference_image_path"])
+        self.assertNotIn("/Users/", payload["preview_url"])
+        self.assertNotIn("..", payload["reference_image_path"])
+        self.assertNotIn("..", payload["preview_url"])
+
+        uploaded_file = resolve_project_path(payload["reference_image_path"])
+        self.assertTrue(uploaded_file.exists())
+        self._cleanup_dirs.append(INPUT_DIR / "reference_uploads")
+
+    def test_vertical_reference_upload_rejects_unknown_vertical(self):
+        response = self.client.post(
+            "/api/verticals/unknown/reference-images",
+            files={"file": ("avatar.png", BytesIO(self.TINY_PNG_BYTES), "image/png")},
+        )
+        self.assertIn(response.status_code, (400, 404))
+        self.assertIn("vertical", response.json()["detail"].lower())
+
     def test_reference_upload_rejects_text_plain(self):
         response = self.client.post(
             "/api/nail/assets/reference-image",
@@ -148,6 +183,14 @@ class NailFastAPITests(unittest.TestCase):
 
         job_payload = self._wait_for_job(payload["job_id"])
         self.assertEqual(job_payload["status"], "succeeded")
+        self.assertEqual(job_payload["stage"], "completed")
+        self.assertTrue(job_payload["started_at"])
+        self.assertTrue(job_payload["updated_at"])
+        self.assertTrue(job_payload["completed_at"])
+        self.assertIsNotNone(job_payload["elapsed_seconds"])
+        self.assertGreaterEqual(job_payload["elapsed_seconds"], 0.0)
+        self.assertIn("error_summary", job_payload)
+        self.assertIsNone(job_payload["failed_stage"])
         package_path = job_payload["package_path"]
         self.assertTrue(package_path)
         self.assertTrue(resolve_project_path(package_path).exists())

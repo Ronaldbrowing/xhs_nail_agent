@@ -92,11 +92,52 @@
       generated: "图片已生成",
       failed: "页面生成失败",
     },
+    stageLabelMap: {
+      queued: "排队中",
+      workflow_running: "生成中",
+      generating_text: "生成文案",
+      generating_images: "生成图片",
+      saving_package: "保存结果",
+      completed: "已完成",
+      failed: "已失败",
+    },
   };
 
-  const currentVertical = APP_CONFIG.verticals[APP_CONFIG.currentVertical];
+  const PLATFORM_LABELS = {
+    xhs: "小红书",
+  };
+  const CONTENT_TYPE_LABELS = {
+    image_text_note: "图文笔记",
+    video_note: "视频笔记",
+  };
+  function labelForPlatform(platform) {
+    if (!platform) return "未知平台";
+    return PLATFORM_LABELS[platform] || platform;
+  }
+  function labelForContentType(type) {
+    if (!type) return "未知类型";
+    return CONTENT_TYPE_LABELS[type] || type;
+  }
+
+  let selectedVertical = APP_CONFIG.currentVertical;
+  let availableVerticals = [];
+  let serverHistoryItems = [];
+  let caseLibraryItems = [];
+  let recentLocalJobs = [];
+  let activeJobFromLocalStorage = null;
+  let historyLoading = false;
+  let historyError = null;
+  let historyRequestToken = 0;
+  let currentReplayNoteId = null;
+  let replayToken = 0; // incremented on each replayHistoryItem call; guards against stale responses
+  let selectedNoteIds = new Set(); // selected note_ids for bulk delete
+  let caseLibraryLoading = false;
+  let caseLibraryError = null;
+  let selectedCase = null;
+  let currentVertical = APP_CONFIG.verticals[selectedVertical];
   const form = document.getElementById("note-form");
   const briefField = document.getElementById("brief");
+  const verticalField = document.getElementById("vertical");
   const styleField = document.getElementById("style_id");
   const styleHelper = document.getElementById("style-helper");
   const skinToneField = document.getElementById("skin_tone");
@@ -114,16 +155,42 @@
   const resultEmpty = document.getElementById("result-empty");
   const noteSummary = document.getElementById("note-summary");
   const pagesGrid = document.getElementById("pages-grid");
+  const currentVerticalBadge = document.getElementById("current-vertical-badge");
   const jobMeta = document.getElementById("job-meta");
   const resumePanel = document.getElementById("resume-panel");
   const resumeText = document.getElementById("resume-text");
   const continueButton = document.getElementById("continue-button");
   const clearJobButton = document.getElementById("clear-job-button");
+  const refreshHistoryButton = document.getElementById("refresh-history-button");
+  const historyPanel = document.getElementById("history-panel");
+  const historyMeta = document.getElementById("history-meta");
+  const historyEmpty = document.getElementById("history-empty");
+  const historyList = document.getElementById("history-list");
+  const historyFilterBar = document.getElementById("history-filter-bar");
+  const historySearchInput = document.getElementById("history-search-input");
+  const historyHasPackageFilter = document.getElementById("history-has-package-filter");
+  const historySortSelect = document.getElementById("history-sort-select");
+  const bulkSelectAllCheckbox = document.getElementById("bulk-select-all-checkbox");
+  const bulkDeleteButton = document.getElementById("bulk-delete-button");
+  const historyBulkActions = document.getElementById("history-bulk-actions");
+  const recentJobsTitle = document.getElementById("recent-jobs-title");
+  const caseLibraryPanel = document.getElementById("case-library-panel");
+  const caseLibraryMeta = document.getElementById("case-library-meta");
+  const caseLibraryEmpty = document.getElementById("case-library-empty");
+  const caseLibraryList = document.getElementById("case-library-list");
+  const selectedCasePanel = document.getElementById("selected-case-panel");
+  const selectedCaseText = document.getElementById("selected-case-text");
+  const clearCaseButton = document.getElementById("clear-case-button");
+  const caseIdField = document.getElementById("case_id");
 
   const STORAGE_KEY = "nail_studio_last_job";
   let currentJobContext = null;
   let continueQueryPromise = null;
   let currentStatusKey = "idle";
+  let activeJobToken = 0;
+  let currentPreviewData = null; // stores packageData for copy actions
+  let previewState = "empty"; // "empty" | "generating" | "failed" | "quick_preview" | "history_replay"
+  let previewFailedSummary = null; // stores error_summary for failed state
 
   function ensureResumeElements() {
     if (!resumePanel || !resumeText || !continueButton || !clearJobButton) {
@@ -148,6 +215,47 @@
     });
   }
 
+  function getVerticalDefinition(vertical) {
+    return availableVerticals.find(function (item) {
+      return item && item.vertical === vertical;
+    }) || null;
+  }
+
+  function buildGenericVerticalConfig(verticalDefinition) {
+    const label = verticalDefinition && verticalDefinition.display_name
+      ? verticalDefinition.display_name
+      : (verticalDefinition && verticalDefinition.vertical) || selectedVertical;
+    return {
+      label: label,
+      styleOptions: [
+        {
+          value: "",
+          label: "自动选择模板",
+          description: "当前内容场景暂未提供专用模板，Studio 会先按通用结构整理内容。",
+        },
+      ],
+      skinToneOptions: [
+        { value: "", label: "自动判断" },
+      ],
+      nailLengthOptions: [
+        { value: "", label: "自动判断" },
+      ],
+      roleLabels: {},
+    };
+  }
+
+  function getCurrentVerticalConfig() {
+    return APP_CONFIG.verticals[selectedVertical] || buildGenericVerticalConfig(getVerticalDefinition(selectedVertical));
+  }
+
+  function updateCurrentVerticalState(vertical) {
+    selectedVertical = vertical;
+    currentVertical = getCurrentVerticalConfig();
+    if (currentVerticalBadge) {
+      currentVerticalBadge.textContent = "当前内容场景 · " + currentVertical.label;
+    }
+  }
+
   function updateStyleHelper() {
     const selected = currentVertical.styleOptions.find(function (item) {
       return item.value === styleField.value;
@@ -156,6 +264,7 @@
   }
 
   function initializeFormOptions() {
+    currentVertical = getCurrentVerticalConfig();
     populateSelect(styleField, currentVertical.styleOptions);
     populateSelect(skinToneField, currentVertical.skinToneOptions);
     populateSelect(nailLengthField, currentVertical.nailLengthOptions);
@@ -212,6 +321,366 @@
     }
   }
 
+  function formatStageLabel(stage) {
+    if (!stage) {
+      return null;
+    }
+    return APP_CONFIG.stageLabelMap[stage] || stage;
+  }
+
+  function formatElapsedSeconds(value) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      return null;
+    }
+    if (value < 1) {
+      return value.toFixed(2) + " 秒";
+    }
+    if (value < 10) {
+      return value.toFixed(1) + " 秒";
+    }
+    return Math.round(value) + " 秒";
+  }
+
+  function getCopyableText(value) {
+    if (value === undefined || value === null) {
+      return "";
+    }
+    if (typeof value === "string") {
+      return value.trim();
+    }
+    if (Array.isArray(value)) {
+      return value.map(function (v) { return getCopyableText(v); }).filter(function (v) { return v.length > 0; }).join(", ");
+    }
+    if (typeof value === "object") {
+      return JSON.stringify(value);
+    }
+    return String(value);
+  }
+
+  function buildCopyButton(label, dataKey) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "secondary-button copy-action-btn";
+    btn.textContent = label;
+    btn.dataset.copyKey = dataKey;
+    btn.addEventListener("click", handleCopyAction);
+    return btn;
+  }
+
+  function handleCopyAction(event) {
+    const key = event.currentTarget.dataset.copyKey;
+    if (!key || !currentPreviewData) {
+      return;
+    }
+    let text = "";
+    if (key === "title") {
+      text = getCopyableText(currentPreviewData.selected_title);
+    } else if (key === "body") {
+      text = getCopyableText(currentPreviewData.body);
+    } else if (key === "tags") {
+      text = getCopyableText(currentPreviewData.tags);
+    } else if (key === "full") {
+      const title = getCopyableText(currentPreviewData.selected_title);
+      const body = getCopyableText(currentPreviewData.body);
+      const tags = getCopyableText(currentPreviewData.tags);
+      const pages = (currentPreviewData.pages || []).map(function (page) {
+        const roleLabel = labelForRole(page.role);
+        const statusLabel = labelForPageStatus(page.status);
+        return "第 " + page.page_no + " 页 · " + roleLabel + " · " + statusLabel;
+      });
+      const parts = [];
+      if (title) parts.push("标题：" + title);
+      if (body) parts.push("正文：" + body);
+      if (tags) parts.push("标签：" + tags);
+      if (pages.length) parts.push("页面结构：\n" + pages.join("\n"));
+      text = parts.join("\n\n");
+    } else if (key === "markdown") {
+      text = buildMarkdown(currentPreviewData);
+    } else if (key === "json") {
+      text = buildJson(currentPreviewData);
+    }
+    if (!text) {
+      return;
+    }
+    navigator.clipboard.writeText(text).then(function () {
+      showCopyFeedback(event.currentTarget);
+    }).catch(function (err) {
+      console.error("copy failed:", err);
+    });
+  }
+
+  function showCopyFeedback(btn) {
+    const original = btn.textContent;
+    btn.textContent = "已复制";
+    btn.disabled = true;
+    setTimeout(function () {
+      btn.textContent = original;
+      btn.disabled = false;
+    }, 1500);
+  }
+
+  function buildMarkdown(packageData) {
+    const lines = [];
+    const title = getCopyableText(packageData.selected_title);
+    const body = getCopyableText(packageData.body);
+    const tags = Array.isArray(packageData.tags)
+      ? packageData.tags.filter(function (t) { return t && typeof t === "string"; })
+      : [];
+
+    if (title) {
+      lines.push("# " + title);
+      lines.push("");
+    }
+    if (body) {
+      lines.push(body);
+      lines.push("");
+    }
+    if (tags.length) {
+      lines.push("## 标签");
+      lines.push("");
+      lines.push(tags.map(function (t) { return "#" + t.trim(); }).join(" "));
+      lines.push("");
+    }
+    const pages = packageData.pages || [];
+    if (pages.length) {
+      lines.push("## 页面结构");
+      lines.push("");
+      pages.forEach(function (page) {
+        const roleLabel = labelForRole(page.role);
+        const statusLabel = labelForPageStatus(page.status);
+        lines.push("### 第 " + page.page_no + " 页 · " + roleLabel + " · " + statusLabel);
+      });
+    }
+    return lines.join("\n");
+  }
+
+  function buildJson(packageData) {
+    const safeTags = Array.isArray(packageData.tags)
+      ? packageData.tags.filter(function (t) { return t != null && typeof t === "string"; })
+      : [];
+    const safePages = Array.isArray(packageData.pages)
+      ? packageData.pages.map(function (page) {
+          return {
+            page_no: page.page_no != null ? page.page_no : null,
+            role: page.role != null ? page.role : null,
+            status: page.status != null ? page.status : null,
+          };
+        })
+      : [];
+    return JSON.stringify({
+      note_id: packageData.note_id || null,
+      selected_title: packageData.selected_title || null,
+      body: packageData.body || null,
+      tags: safeTags.length ? safeTags : null,
+      pages: safePages.length ? safePages : null,
+      vertical: packageData.vertical || null,
+    }, null, 2);
+  }
+
+  function triggerDownload(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  async function exportHistoryItemAsJson(item, button) {
+    const originalText = button.textContent;
+    let failed = false;
+    button.disabled = true;
+    button.textContent = "导出中";
+    try {
+      const packageData = await fetchJson(buildVerticalPackageUrl(item.note_id));
+      const jsonStr = buildJson(packageData);
+      triggerDownload(jsonStr, item.note_id + "_export.json", "application/json;charset=utf-8");
+    } catch (error) {
+      failed = true;
+      console.error("Failed to export history item", error);
+    } finally {
+      if (failed) {
+        button.textContent = "导出失败";
+        setTimeout(function () {
+          button.textContent = originalText;
+          button.disabled = false;
+        }, 1500);
+      } else {
+        button.textContent = originalText;
+        button.disabled = false;
+      }
+    }
+  }
+
+  async function exportHistoryItemAsMarkdown(item, button) {
+    const originalText = button.textContent;
+    let failed = false;
+    button.disabled = true;
+    button.textContent = "导出中";
+    try {
+      const packageData = await fetchJson(buildVerticalPackageUrl(item.note_id));
+      const mdStr = buildMarkdown(packageData);
+      triggerDownload(mdStr, item.note_id + "_export.md", "text/markdown;charset=utf-8");
+    } catch (error) {
+      failed = true;
+      console.error("Failed to export history item", error);
+    } finally {
+      if (failed) {
+        button.textContent = "导出失败";
+        setTimeout(function () {
+          button.textContent = originalText;
+          button.disabled = false;
+        }, 1500);
+      } else {
+        button.textContent = originalText;
+        button.disabled = false;
+      }
+    }
+  }
+
+  async function deleteHistoryItem(item) {
+    const confirmed = window.confirm("确定删除该历史记录？删除后不可恢复。");
+    if (!confirmed) {
+      return;
+    }
+    try {
+      const url = buildVerticalNotesUrl() + "/" + encodeURIComponent(item.note_id);
+      const response = await fetch(url, { method: "DELETE" });
+      if (!response.ok) {
+        console.error("Failed to delete history item", response.status);
+        return;
+      }
+      window.location.reload();
+    } catch (error) {
+      console.error("Failed to delete history item", error);
+    }
+  }
+
+  async function bulkDeleteSelectedNotes() {
+    if (selectedNoteIds.size === 0) {
+      return;
+    }
+    const count = selectedNoteIds.size;
+    const confirmed = window.confirm("确定删除选中的 " + count + " 条历史记录？删除后不可恢复。");
+    if (!confirmed) {
+      return;
+    }
+    try {
+      const url = buildVerticalNotesUrl() + "/delete";
+      const noteIdsArray = Array.from(selectedNoteIds);
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note_ids: noteIdsArray }),
+      });
+      if (!response.ok) {
+        console.error("Bulk delete failed", response.status);
+        return;
+      }
+      const result = await response.json();
+      if (result.deleted && result.deleted.length > 0) {
+        window.location.reload();
+      } else if (result.failed && result.failed.length > 0) {
+        console.error("Bulk delete completed with failures:", result.failed);
+      }
+    } catch (error) {
+      console.error("Failed to bulk delete history items", error);
+    }
+  }
+
+  function updateBulkDeleteButton() {
+    if (!bulkDeleteButton) return;
+    const count = selectedNoteIds.size;
+    if (count === 0) {
+      bulkDeleteButton.disabled = true;
+      bulkDeleteButton.textContent = "批量删除";
+    } else {
+      bulkDeleteButton.disabled = false;
+      bulkDeleteButton.textContent = "删除选中（" + count + "）";
+    }
+  }
+
+  function updateBulkSelectAllState() {
+    if (!bulkSelectAllCheckbox) return;
+    const selectableItems = serverHistoryItems.filter(function (item) { return !!item.note_id; });
+    if (selectableItems.length === 0) {
+      bulkSelectAllCheckbox.checked = false;
+      bulkSelectAllCheckbox.indeterminate = false;
+      return;
+    }
+    const allSelected = selectableItems.every(function (item) { return selectedNoteIds.has(item.note_id); });
+    const someSelected = selectableItems.some(function (item) { return selectedNoteIds.has(item.note_id); });
+    bulkSelectAllCheckbox.checked = allSelected;
+    bulkSelectAllCheckbox.indeterminate = someSelected && !allSelected;
+  }
+
+  function buildProgressDetail(stateKey, detailText, job) {
+    const state = APP_CONFIG.jobStatusMap[stateKey] || APP_CONFIG.jobStatusMap.idle;
+    const segments = [];
+    const baseText = detailText || state.detail;
+    if (baseText) {
+      segments.push(baseText);
+    }
+
+    if (!job || stateKey === "restored") {
+      return segments.join(" · ");
+    }
+
+    const stageText = formatStageLabel(job.stage);
+    if (stageText) {
+      segments.push("阶段：" + stageText);
+    }
+
+    const elapsedText = formatElapsedSeconds(job.elapsed_seconds);
+    if (elapsedText) {
+      const isTerminal = stateKey === "succeeded" || stateKey === "failed" || stateKey === "partial_failed";
+      segments.push((isTerminal ? "总耗时：" : "耗时：") + elapsedText);
+    }
+
+    if ((stateKey === "failed" || stateKey === "partial_failed") && job.failed_stage) {
+      segments.push("失败阶段：" + job.failed_stage);
+    }
+
+    if ((stateKey === "failed" || stateKey === "partial_failed") && job.error_summary) {
+      segments.push("错误摘要：" + job.error_summary);
+    }
+
+    return segments.join(" · ");
+  }
+
+  function buildJobMetaPayload(job, extras) {
+    const data = job || {};
+    const payload = data.payload || {};
+    const overrides = extras || {};
+    return sanitizePayload({
+      note: overrides.note,
+      job_id: data.job_id || overrides.job_id || null,
+      status: data.status || overrides.status || null,
+      stage: data.stage || overrides.stage || null,
+      elapsed_seconds: data.elapsed_seconds,
+      started_at: data.started_at || null,
+      updated_at: data.updated_at || null,
+      completed_at: data.completed_at || data.finished_at || null,
+      failed_stage: data.failed_stage || overrides.failed_stage || null,
+      error_summary: data.error_summary || overrides.error_summary || null,
+      note_id: data.note_id || overrides.note_id || null,
+      vertical: payload.vertical || overrides.vertical || selectedVertical,
+      reference_source: payload.reference_source || overrides.reference_source || null,
+      case_id: payload.case_id || overrides.case_id || null,
+      reference_image_path: payload.reference_image_path || overrides.reference_image_path || null,
+      package_path: data.package_path || overrides.package_path || null,
+      output_dir: data.output_dir || overrides.output_dir || null,
+      error: data.error || overrides.error || null,
+      qa_score: overrides.qa_score || null,
+      url: overrides.url || null,
+      status_code: overrides.status_code || null,
+      diagnostics: data.diagnostics || overrides.diagnostics || null,
+    });
+  }
+
   function getPollConfig(generateImages) {
     if (generateImages) {
       return {
@@ -227,6 +696,7 @@
 
   function saveLastJob(context) {
     currentJobContext = context;
+    activeJobFromLocalStorage = context;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(context));
     } catch (error) {
@@ -236,6 +706,7 @@
 
   function clearLastJob() {
     currentJobContext = null;
+    activeJobFromLocalStorage = null;
     try {
       window.localStorage.removeItem(STORAGE_KEY);
     } catch (error) {
@@ -253,6 +724,7 @@
         return null;
       }
       currentJobContext = JSON.parse(stored);
+      activeJobFromLocalStorage = currentJobContext;
       return currentJobContext;
     } catch (error) {
       return null;
@@ -261,13 +733,17 @@
 
   function getRecentJobs() {
     try {
-      return JSON.parse(localStorage.getItem(RECENT_JOBS_KEY) || "[]");
+      const jobs = JSON.parse(localStorage.getItem(RECENT_JOBS_KEY) || "[]");
+      recentLocalJobs = Array.isArray(jobs) ? jobs : [];
+      return recentLocalJobs;
     } catch (_) {
+      recentLocalJobs = [];
       return [];
     }
   }
 
   function setRecentJobs(jobs) {
+    recentLocalJobs = jobs;
     try {
       localStorage.setItem(RECENT_JOBS_KEY, JSON.stringify(jobs));
     } catch (_) {
@@ -333,11 +809,11 @@
     }
   }
 
-  function applyStatus(stateKey, detailText) {
+  function applyStatus(stateKey, detailText, job) {
     const state = APP_CONFIG.jobStatusMap[stateKey] || APP_CONFIG.jobStatusMap.idle;
     currentStatusKey = stateKey;
     statusText.textContent = state.title;
-    progressDetail.textContent = detailText || state.detail;
+    progressDetail.textContent = buildProgressDetail(stateKey, detailText, job);
     statusBadge.textContent = state.badge;
     statusBadge.className = "status-badge status-" + stateKey;
     progressPanel.hidden = stateKey === "idle" && resumePanel.hidden;
@@ -347,12 +823,28 @@
   function clearResults() {
     noteSummary.innerHTML = "";
     pagesGrid.innerHTML = "";
-    resultEmpty.hidden = false;
+    currentPreviewData = null;
+    previewState = "empty";
+    currentReplayNoteId = null;
+    previewFailedSummary = null;
+    showResultEmptyState();
     resultMeta.textContent = "生成完成后，这里会展示标题、正文、标签和多页内容结构。";
   }
 
   function showResults() {
-    resultEmpty.hidden = true;
+    hideResultEmptyState();
+  }
+
+  function showResultEmptyState() {
+    if (resultEmpty) {
+      resultEmpty.hidden = false;
+    }
+  }
+
+  function hideResultEmptyState() {
+    if (resultEmpty) {
+      resultEmpty.hidden = true;
+    }
   }
 
   function sanitizePayload(rawPayload) {
@@ -368,6 +860,567 @@
       payload[key] = value;
     });
     return payload;
+  }
+
+  async function loadVerticalOptions() {
+    const response = await fetchJson("/api/verticals");
+    const verticals = Array.isArray(response.verticals) ? response.verticals.filter(function (item) {
+      return item && item.enabled;
+    }) : [];
+    availableVerticals = verticals;
+
+    if (verticalField) {
+      verticalField.innerHTML = "";
+      verticals.forEach(function (item) {
+        const option = document.createElement("option");
+        option.value = item.vertical;
+        option.textContent = item.display_name || item.vertical;
+        verticalField.appendChild(option);
+      });
+    }
+
+    const hasDefaultVertical = verticals.some(function (item) {
+      return item.vertical === APP_CONFIG.currentVertical;
+    });
+    const fallbackVertical = verticals.length > 0 ? verticals[0].vertical : APP_CONFIG.currentVertical;
+    updateCurrentVerticalState(hasDefaultVertical ? APP_CONFIG.currentVertical : fallbackVertical);
+    if (verticalField) {
+      verticalField.value = selectedVertical;
+    }
+    initializeFormOptions();
+  }
+
+  function buildVerticalCasesUrl() {
+    return "/api/verticals/" + encodeURIComponent(selectedVertical) + "/cases";
+  }
+
+  function buildCasePreviewUrl(item) {
+    if (
+      item &&
+      typeof item.preview_url === "string" &&
+      (item.preview_url.startsWith("/static/") || item.preview_url.startsWith("/api/verticals/"))
+    ) {
+      return item.preview_url;
+    }
+    if (!item || typeof item.image_path !== "string") {
+      return null;
+    }
+    if (!item.image_path.startsWith("case_library/")) {
+      return null;
+    }
+    if (item.image_path.indexOf("..") !== -1 || item.image_path.startsWith("/") || item.image_path.indexOf(":") !== -1) {
+      return null;
+    }
+    return null;
+  }
+
+  function syncCaseInputWithSelection(item) {
+    if (!caseIdField) {
+      return;
+    }
+    caseIdField.value = item && item.case_id ? item.case_id : "";
+  }
+
+  function renderSelectedCasePanel() {
+    if (!selectedCasePanel || !selectedCaseText) {
+      return;
+    }
+    if (!selectedCase) {
+      selectedCasePanel.hidden = true;
+      return;
+    }
+    const label = selectedCase.title || selectedCase.case_id || "已选案例";
+    const secondary = selectedCase.case_id && selectedCase.case_id !== label ? " · " + selectedCase.case_id : "";
+    selectedCaseText.textContent = "已选择案例：" + label + secondary;
+    selectedCasePanel.hidden = false;
+  }
+
+  function clearCaseSelection(options) {
+    const settings = options || {};
+    selectedCase = null;
+    if (!settings.preserveInput) {
+      syncCaseInputWithSelection(null);
+    }
+    renderSelectedCasePanel();
+    renderCaseLibrary();
+  }
+
+  function selectCase(item) {
+    selectedCase = item || null;
+    syncCaseInputWithSelection(item);
+    renderSelectedCasePanel();
+    if (currentReferenceImage) {
+      clearReferenceImage({ preserveCaseSelection: true });
+    }
+    renderCaseLibrary();
+  }
+
+  function buildCaseLibraryItem(item) {
+    const article = document.createElement("article");
+    article.className = "recent-job-item";
+    article.dataset.caseId = item.case_id || "";
+
+    const meta = document.createElement("div");
+    meta.className = "recent-job-meta";
+
+    const caseIdLabel = document.createElement("span");
+    caseIdLabel.className = "recent-job-id";
+    caseIdLabel.textContent = item.case_id || "case";
+    meta.appendChild(caseIdLabel);
+
+    const taskLabel = document.createElement("span");
+    taskLabel.className = "recent-job-status";
+    taskLabel.textContent = item.task || selectedVertical;
+    meta.appendChild(taskLabel);
+
+    const imageLabel = document.createElement("span");
+    imageLabel.className = "recent-job-mode";
+    imageLabel.textContent = item.has_image ? "含参考图" : "无图片";
+    meta.appendChild(imageLabel);
+
+    const summary = document.createElement("div");
+    summary.className = "recent-job-summary";
+
+    const title = document.createElement("span");
+    title.className = "recent-job-brief";
+    title.textContent = item.title || item.case_id || "未命名案例";
+    summary.appendChild(title);
+
+    const brief = document.createElement("span");
+    brief.className = "recent-job-time";
+    brief.textContent = item.brief || "可复用当前案例的风格方向。";
+    summary.appendChild(brief);
+
+    const actions = document.createElement("div");
+    actions.className = "recent-job-actions";
+
+    const chooseButton = document.createElement("button");
+    chooseButton.type = "button";
+    chooseButton.className = "secondary-button recent-job-open";
+    chooseButton.textContent = selectedCase && selectedCase.case_id === item.case_id ? "已选中" : "使用案例";
+    chooseButton.disabled = selectedCase && selectedCase.case_id === item.case_id;
+    chooseButton.addEventListener("click", function () {
+      selectCase(item);
+    });
+    actions.appendChild(chooseButton);
+
+    const imageUrl = buildCasePreviewUrl(item);
+    if (imageUrl) {
+      const image = document.createElement("img");
+      image.className = "page-image";
+      image.src = imageUrl;
+      image.alt = item.title || item.case_id || "案例预览";
+      article.appendChild(image);
+    }
+
+    article.appendChild(meta);
+    article.appendChild(summary);
+    article.appendChild(actions);
+    return article;
+  }
+
+  function renderCaseLibrary() {
+    if (!caseLibraryPanel || !caseLibraryEmpty || !caseLibraryList || !caseLibraryMeta) {
+      return;
+    }
+
+    caseLibraryPanel.hidden = false;
+    caseLibraryList.innerHTML = "";
+
+    if (caseLibraryLoading) {
+      caseLibraryEmpty.hidden = true;
+      caseLibraryList.hidden = true;
+      caseLibraryMeta.textContent = "正在加载当前内容场景的案例库...";
+      return;
+    }
+
+    if (caseLibraryError) {
+      caseLibraryEmpty.hidden = false;
+      caseLibraryList.hidden = true;
+      caseLibraryMeta.textContent = "案例库暂时加载失败。";
+      caseLibraryEmpty.querySelector("strong").textContent = "案例库加载失败";
+      caseLibraryEmpty.querySelector("p").textContent = "你仍然可以直接填写 case_id，或改用本地参考图继续生成。";
+      return;
+    }
+
+    caseLibraryEmpty.querySelector("strong").textContent = "还没有可用案例";
+    caseLibraryEmpty.querySelector("p").textContent = "当当前内容场景存在可复用案例时，这里会显示可直接选择的案例卡片。";
+    if (!caseLibraryItems.length) {
+      caseLibraryEmpty.hidden = false;
+      caseLibraryList.hidden = true;
+      caseLibraryMeta.textContent = "当前内容场景暂时没有可选案例。";
+      return;
+    }
+
+    caseLibraryEmpty.hidden = true;
+    caseLibraryList.hidden = false;
+    caseLibraryMeta.textContent = "选择案例后，Studio 会以案例风格方向继续生成。";
+    caseLibraryItems.forEach(function (item) {
+      caseLibraryList.appendChild(buildCaseLibraryItem(item));
+    });
+  }
+
+  async function loadCaseLibrary() {
+    if (!selectedVertical) {
+      caseLibraryItems = [];
+      caseLibraryLoading = false;
+      caseLibraryError = null;
+      renderCaseLibrary();
+      return;
+    }
+    caseLibraryLoading = true;
+    caseLibraryError = null;
+    renderCaseLibrary();
+    try {
+      const response = await fetchJson(buildVerticalCasesUrl());
+      caseLibraryItems = Array.isArray(response.items) ? response.items : [];
+      caseLibraryLoading = false;
+      caseLibraryError = null;
+      renderCaseLibrary();
+    } catch (error) {
+      caseLibraryItems = [];
+      caseLibraryLoading = false;
+      caseLibraryError = error;
+      renderCaseLibrary();
+      setJobMeta({
+        note: "case library load failed",
+        vertical: selectedVertical,
+        status: error.status || null,
+        url: error.url || null,
+        error: formatError(error),
+      });
+    }
+  }
+
+  function buildHistoryItem(item) {
+    const article = document.createElement("article");
+    article.className = "recent-job-item";
+    article.dataset.noteId = item.note_id;
+
+    // Checkbox for bulk selection
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "history-select-checkbox";
+    checkbox.dataset.noteId = item.note_id;
+    if (selectedNoteIds.has(item.note_id)) {
+      checkbox.checked = true;
+    }
+    checkbox.addEventListener("change", function () {
+      if (this.checked) {
+        selectedNoteIds.add(item.note_id);
+      } else {
+        selectedNoteIds.delete(item.note_id);
+      }
+      updateBulkDeleteButton();
+      updateBulkSelectAllState();
+    });
+
+    const meta = document.createElement("div");
+    meta.className = "recent-job-meta";
+
+    const noteIdLabel = document.createElement("span");
+    noteIdLabel.className = "recent-job-id";
+    noteIdLabel.textContent = (item.note_id || "unknown").slice(0, 18) + "...";
+    meta.appendChild(noteIdLabel);
+
+    const statusLabel = document.createElement("span");
+    statusLabel.className = "recent-job-status";
+    statusLabel.textContent = jobStatusLabel(item.status || "idle");
+    meta.appendChild(statusLabel);
+
+    const modeLabel = document.createElement("span");
+    modeLabel.className = "recent-job-mode";
+    modeLabel.textContent = item.has_package ? "可回放" : "无结果包";
+    meta.appendChild(modeLabel);
+
+    // content_platform badge
+    const platformBadge = document.createElement("span");
+    platformBadge.className = "recent-job-platform";
+    platformBadge.textContent = labelForPlatform(item.content_platform);
+    meta.appendChild(platformBadge);
+
+    // content_type tag
+    const typeTag = document.createElement("span");
+    typeTag.className = "recent-job-type";
+    typeTag.textContent = labelForContentType(item.content_type);
+    meta.appendChild(typeTag);
+
+    // scenario badge (if present)
+    if (item.scenario && typeof item.scenario === "string" && item.scenario.trim()) {
+      const scenarioTag = document.createElement("span");
+      scenarioTag.className = "recent-job-scenario";
+      scenarioTag.textContent = item.scenario.trim();
+      meta.appendChild(scenarioTag);
+    }
+
+    const summary = document.createElement("div");
+    summary.className = "recent-job-summary";
+
+    const title = document.createElement("span");
+    title.className = "recent-job-brief";
+    title.textContent = item.selected_title || item.brief || item.note_id || "未命名内容";
+    summary.appendChild(title);
+
+    const time = document.createElement("span");
+    time.className = "recent-job-time";
+    time.textContent = item.created_at
+      ? new Date(item.created_at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
+      : "时间未知";
+    summary.appendChild(time);
+
+    const actions = document.createElement("div");
+    actions.className = "recent-job-actions";
+
+    const canReplay = !!(item.note_id && item.has_package);
+    const openButton = document.createElement("button");
+    openButton.type = "button";
+    openButton.className = "secondary-button recent-job-open";
+    openButton.textContent = canReplay ? "回放预览" : "无法回放";
+    openButton.disabled = !canReplay;
+    if (!canReplay) {
+      openButton.title = "该记录没有结果包，无法回放";
+    } else {
+      openButton.addEventListener("click", function () {
+        replayHistoryItem(item);
+      });
+    }
+
+    actions.appendChild(openButton);
+
+    const canExport = !!(item.note_id && item.has_package);
+    const exportJsonBtn = document.createElement("button");
+    exportJsonBtn.type = "button";
+    exportJsonBtn.className = "secondary-button recent-job-export";
+    exportJsonBtn.textContent = "导出 JSON";
+    exportJsonBtn.disabled = !canExport;
+    if (!canExport) {
+      exportJsonBtn.title = "该记录没有结果包，无法导出";
+    } else {
+      exportJsonBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        exportHistoryItemAsJson(item, exportJsonBtn);
+      });
+    }
+
+    const exportMdBtn = document.createElement("button");
+    exportMdBtn.type = "button";
+    exportMdBtn.className = "secondary-button recent-job-export";
+    exportMdBtn.textContent = "导出 Markdown";
+    exportMdBtn.disabled = !canExport;
+    if (!canExport) {
+      exportMdBtn.title = "该记录没有结果包，无法导出";
+    } else {
+      exportMdBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        exportHistoryItemAsMarkdown(item, exportMdBtn);
+      });
+    }
+
+    actions.appendChild(exportJsonBtn);
+    actions.appendChild(exportMdBtn);
+
+    const canDelete = !!(item.note_id);
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "secondary-button history-delete-button";
+    deleteBtn.textContent = "删除";
+    deleteBtn.disabled = !canDelete;
+    if (canDelete) {
+      deleteBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        deleteHistoryItem(item);
+      });
+    }
+
+    actions.appendChild(deleteBtn);
+    article.appendChild(meta);
+    article.appendChild(summary);
+    article.appendChild(actions);
+    article.insertBefore(checkbox, article.firstChild);
+    return article;
+  }
+
+  function isHistoryFilterActive() {
+    const search = historySearchInput && historySearchInput.value.trim();
+    const hasPkg = historyHasPackageFilter && historyHasPackageFilter.value;
+    return !!(search || (hasPkg && hasPkg !== "all"));
+  }
+
+  function renderServerHistory() {
+    if (!historyPanel || !historyList || !historyEmpty || !historyMeta) {
+      return;
+    }
+
+    historyPanel.hidden = false;
+    historyList.innerHTML = "";
+
+    // Show filter bar whenever there's any data or any filter is set
+    const hasItems = serverHistoryItems.length > 0;
+    const filterActive = isHistoryFilterActive();
+    if (hasItems || filterActive) {
+      if (historyFilterBar) historyFilterBar.hidden = false;
+    } else {
+      if (historyFilterBar) historyFilterBar.hidden = true;
+    }
+
+    // Show bulk actions when there are selectable items
+    const selectableItems = serverHistoryItems.filter(function (item) { return !!item.note_id; });
+    if (hasItems && selectableItems.length > 0) {
+      if (historyBulkActions) historyBulkActions.hidden = false;
+    } else {
+      if (historyBulkActions) historyBulkActions.hidden = true;
+    }
+    updateBulkSelectAllState();
+
+    if (historyLoading) {
+      historyEmpty.hidden = true;
+      historyList.hidden = true;
+      historyMeta.textContent = "正在从服务端加载历史内容...";
+      return;
+    }
+
+    if (historyError) {
+      historyEmpty.hidden = false;
+      historyList.hidden = true;
+      historyMeta.textContent = "历史内容暂时加载失败，请稍后点击刷新历史重试。";
+      historyEmpty.querySelector("strong").textContent = "历史内容加载失败";
+      historyEmpty.querySelector("p").textContent = "服务端历史暂时不可用，请稍后点击「刷新历史」重试。";
+      return;
+    }
+
+    if (!serverHistoryItems.length) {
+      historyEmpty.hidden = false;
+      historyList.hidden = true;
+      if (filterActive) {
+        historyEmpty.querySelector("strong").textContent = "没有匹配的历史内容";
+        historyEmpty.querySelector("p").textContent = "请尝试调整搜索条件或清除筛选。";
+        historyMeta.textContent = "没有匹配的历史内容，请调整搜索条件。";
+      } else {
+        historyEmpty.querySelector("strong").textContent = "还没有历史内容";
+        historyEmpty.querySelector("p").textContent = "当服务端存在历史 package 时，这里会显示可回放的记录。";
+        historyMeta.textContent = "这里显示服务端历史内容，点击后会回放到下方内容预览区。";
+      }
+      return;
+    }
+
+    historyEmpty.hidden = true;
+    historyList.hidden = false;
+    historyMeta.textContent = "历史内容来自服务端接口，可直接回放到右侧内容预览区。";
+    serverHistoryItems.forEach(function (item) {
+      historyList.appendChild(buildHistoryItem(item));
+    });
+  }
+
+  async function loadServerHistory() {
+    const token = ++historyRequestToken;
+    // Clear bulk selection on every refresh
+    selectedNoteIds.clear();
+    updateBulkDeleteButton();
+    if (!selectedVertical) {
+      serverHistoryItems = [];
+      historyLoading = false;
+      historyError = null;
+      if (historyRequestToken === token) {
+        renderServerHistory();
+      }
+      return;
+    }
+    historyLoading = true;
+    historyError = null;
+    if (historyRequestToken === token) {
+      renderServerHistory();
+    }
+    try {
+      const response = await fetchJson(buildVerticalNotesUrl());
+      if (historyRequestToken !== token) {
+        return;
+      }
+      serverHistoryItems = Array.isArray(response.items) ? response.items : [];
+      historyLoading = false;
+      historyError = null;
+      if (historyRequestToken === token) {
+        renderServerHistory();
+      }
+    } catch (error) {
+      if (historyRequestToken !== token) {
+        return;
+      }
+      serverHistoryItems = [];
+      historyLoading = false;
+      historyError = error;
+      if (historyRequestToken === token) {
+        renderServerHistory();
+      }
+      setJobMeta({
+        note: "history load failed",
+        vertical: selectedVertical,
+        status: error.status || null,
+        url: error.url || null,
+        error: formatError(error),
+      });
+    }
+  }
+
+  async function replayHistoryItem(item) {
+    if (!item || !item.note_id || !selectedVertical) {
+      return;
+    }
+    activeJobToken += 1;
+    const thisReplayToken = ++replayToken;
+    previewState = "history_replay";
+    previewFailedSummary = null;
+    currentPreviewData = null;
+    currentReplayNoteId = item.note_id;
+    applyStatus("running", "正在加载历史结果包");
+    try {
+      const packageData = await fetchJson(buildVerticalPackageUrl(item.note_id));
+      // Guard: stale response from an older replay — skip rendering
+      if (thisReplayToken !== replayToken) {
+        return;
+      }
+      const generateImages = Array.isArray(packageData.pages) && packageData.pages.some(function (page) {
+        return Boolean(normalizeOutputImagePath(page.image_path));
+      });
+      renderPackage(packageData, generateImages, {
+        job_id: item.job_id || null,
+        note_id: item.note_id,
+        status: "history_replay",
+        error: null,
+      });
+      hideResultEmptyState();
+      applyStatus("restored", "已从历史记录回放内容。");
+      resultMeta.textContent = "当前正在查看服务端历史内容回放。";
+      setJobMeta(
+        buildJobMetaPayload(
+          { note_id: item.note_id, status: "history_replay" },
+          {
+            note: "history replay",
+            vertical: selectedVertical,
+          }
+        )
+      );
+    } catch (error) {
+      // Guard: stale response
+      if (thisReplayToken !== replayToken) {
+        return;
+      }
+      applyStatus("failed", "历史内容加载失败");
+      resultMeta.textContent = "这条历史内容暂时无法回放，请稍后刷新历史后重试。";
+      setJobMeta(
+        buildJobMetaPayload(
+          { note_id: item.note_id },
+          {
+            note: "history replay failed",
+            vertical: selectedVertical,
+            status: error.status || null,
+            url: error.url || null,
+            error: formatError(error),
+            failed_stage: "history_replay",
+            error_summary: formatError(error),
+          }
+        )
+      );
+    }
   }
 
   function normalizeOutputImagePath(imagePath) {
@@ -504,9 +1557,17 @@
   }
 
   function renderPackage(packageData, generateImages, job) {
+    currentPreviewData = packageData;
+    previewState = job && job.status === "history_replay" ? "history_replay" : "quick_preview";
+    previewFailedSummary = null;
     clearResults();
     showResults();
-    resultMeta.textContent = "已经为你整理出一版可查看的标题、正文、标签和页面结构。";
+
+    if (previewState === "history_replay") {
+      resultMeta.textContent = "当前正在查看历史内容回放。";
+    } else {
+      resultMeta.textContent = "已经为你整理出一版可查看的标题、正文、标签和页面结构。";
+    }
 
     noteSummary.appendChild(
       buildSummaryCard(
@@ -518,12 +1579,23 @@
     noteSummary.appendChild(buildSummaryCard("正文", packageData.body || "—"));
     noteSummary.appendChild(buildSummaryCard("标签", buildTagList(packageData.tags || [])));
 
-    setJobMeta({
-      job_id: job.job_id,
-      note_id: packageData.note_id,
-      qa_score: packageData.diagnostics ? packageData.diagnostics.qa_score : null,
-      error: job.error || null,
-    });
+    const copyActionsBar = document.createElement("div");
+    copyActionsBar.className = "copy-actions-bar";
+    copyActionsBar.appendChild(buildCopyButton("复制标题", "title"));
+    copyActionsBar.appendChild(buildCopyButton("复制正文", "body"));
+    copyActionsBar.appendChild(buildCopyButton("复制标签", "tags"));
+    copyActionsBar.appendChild(buildCopyButton("复制完整内容", "full"));
+    copyActionsBar.appendChild(buildCopyButton("复制 Markdown", "markdown"));
+    copyActionsBar.appendChild(buildCopyButton("复制 JSON", "json"));
+    noteSummary.appendChild(copyActionsBar);
+
+    setJobMeta(
+      buildJobMetaPayload(job, {
+        note_id: packageData.note_id,
+        qa_score: packageData.diagnostics ? packageData.diagnostics.qa_score : null,
+        error: job.error || null,
+      })
+    );
 
     (packageData.pages || []).forEach(function (page) {
       pagesGrid.appendChild(buildPageCard(page, generateImages));
@@ -532,6 +1604,23 @@
     if (typeof resultSection.scrollIntoView === "function") {
       resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
     }
+  }
+
+  function buildVerticalNotesUrl() {
+    const base = "/api/verticals/" + encodeURIComponent(selectedVertical) + "/notes";
+    const params = new URLSearchParams();
+    const search = historySearchInput && historySearchInput.value.trim();
+    const hasPkg = historyHasPackageFilter && historyHasPackageFilter.value;
+    const sort = historySortSelect && historySortSelect.value;
+    if (search) params.set("search", search);
+    if (hasPkg && hasPkg !== "all") params.set("has_package", hasPkg);
+    if (sort && sort !== "created_at_desc") params.set("sort", sort);
+    const qs = params.toString();
+    return qs ? base + "?" + qs : base;
+  }
+
+  function buildVerticalPackageUrl(noteId) {
+    return buildVerticalNotesUrl() + "/" + encodeURIComponent(noteId) + "/package";
   }
 
   async function fetchJson(url, options) {
@@ -557,8 +1646,8 @@
       throw new Error("job package render requires note_id");
     }
 
-    applyStatus(statusKey, detailText);
-    const packageData = await fetchJson("/api/nail/notes/" + encodeURIComponent(job.note_id) + "/package");
+    applyStatus(statusKey, detailText, job);
+    const packageData = await fetchJson(buildVerticalPackageUrl(job.note_id));
     saveLastJob({
       jobId: job.job_id,
       noteId: job.note_id,
@@ -597,23 +1686,27 @@
       resultMeta.textContent = "这次任务只完成了部分内容，你可以先查看已生成的标题、正文、标签和页面结构。";
       return true;
     } catch (error) {
-      applyStatus("partial_failed", "部分完成，但结果包读取失败");
+      applyStatus("partial_failed", "部分完成，但结果包读取失败", job);
       resultMeta.textContent = "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。";
-      setJobMeta({
-        job_id: job.job_id,
-        note_id: job.note_id || null,
-        error: formatError(error),
-        package_path: job.package_path || null,
-        diagnostics: job.diagnostics || null,
-      });
+      setJobMeta(
+        buildJobMetaPayload(job, {
+          error: formatError(error),
+          package_path: job.package_path || null,
+          diagnostics: job.diagnostics || null,
+        })
+      );
       return false;
     }
   }
 
   async function pollJob(jobId, generateImages) {
+    const token = activeJobToken;
     const pollConfig = getPollConfig(generateImages);
     const startedAt = Date.now();
     while (Date.now() - startedAt < pollConfig.maxPollMs) {
+      if (token !== activeJobToken) {
+        return { kind: "cancelled", job: { job_id: jobId } };
+      }
       const job = await fetchJson("/api/jobs/" + encodeURIComponent(jobId));
       saveLastJob({
         jobId: job.job_id,
@@ -630,11 +1723,13 @@
       });
       renderRecentJobs();
       if (job.status === "queued") {
-        applyStatus("queued", "已提交，等待开始");
+        applyStatus("queued", "已提交，等待开始", job);
+        previewState = "generating";
       } else if (job.status === "running") {
-        applyStatus("running", "正在生成内容");
+        applyStatus("running", "正在生成内容", job);
+        previewState = "generating";
       }
-      setJobMeta(job);
+      setJobMeta(buildJobMetaPayload(job));
       if (job.status === "succeeded") {
         return { kind: "success", job: job };
       }
@@ -661,9 +1756,13 @@
     continueButton.textContent = "查询中...";
 
     continueQueryPromise = (async function () {
+      const token = ++activeJobToken;
       try {
         const job = await fetchJson("/api/jobs/" + encodeURIComponent(jobContext.jobId));
-        setJobMeta(job);
+        if (token !== activeJobToken) {
+          return;
+        }
+        setJobMeta(buildJobMetaPayload(job));
         saveLastJob({
           jobId: job.job_id,
           noteId: job.note_id || null,
@@ -671,52 +1770,69 @@
         });
 
         if (job.status === "succeeded") {
+          if (token !== activeJobToken) {
+            return;
+          }
           await renderSucceededJob(job, jobContext.generateImages);
           return;
         }
 
         if (job.status === "partial_failed") {
+          if (token !== activeJobToken) {
+            return;
+          }
           if (job.note_id) {
             await tryRenderPartialFailedJob(job, jobContext.generateImages);
           } else {
-            applyStatus("partial_failed");
+            applyStatus("partial_failed", null, job);
             resultMeta.textContent = "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。";
           }
           return;
         }
 
         if (job.status === "failed") {
-          applyStatus("failed");
+          applyStatus("failed", null, job);
+          previewState = "failed";
+          previewFailedSummary = job.error_summary ? job.error_summary : null;
           resultMeta.textContent = "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
           return;
         }
 
-        applyStatus(job.status === "running" ? "running" : "queued");
+        applyStatus(job.status === "running" ? "running" : "queued", null, job);
         showResumePanel("生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。");
         const result = await pollJob(job.job_id, jobContext.generateImages);
+        if (result.kind === "cancelled") {
+          return;
+        }
 
         if (result.kind === "timeout") {
-          applyStatus("timeout");
+          applyStatus("timeout", null, job);
           resultMeta.textContent = "生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。";
-          setJobMeta({ job_id: job.job_id, status: "timeout" });
+          setJobMeta(buildJobMetaPayload({ job_id: job.job_id, status: "timeout" }));
           showResumePanel("生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。");
           return;
         }
 
         if (result.kind === "failed") {
           const failedJob = result.job;
+          if (token !== activeJobToken) {
+            return;
+          }
           if (failedJob.status === "partial_failed" && failedJob.note_id) {
             await tryRenderPartialFailedJob(failedJob, jobContext.generateImages);
           } else {
-            applyStatus(failedJob.status === "partial_failed" ? "partial_failed" : "failed");
+            applyStatus(failedJob.status === "partial_failed" ? "partial_failed" : "failed", null, failedJob);
             resultMeta.textContent = failedJob.status === "partial_failed"
               ? "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。"
               : "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
-            setJobMeta(failedJob);
+            setJobMeta(buildJobMetaPayload(failedJob));
           }
           return;
         }
 
+        if (token !== activeJobToken) {
+          return;
+        }
         await renderSucceededJob(result.job, jobContext.generateImages);
       } catch (error) {
         const isNotFound = error.status === 404 ||
@@ -729,17 +1845,17 @@
           // Fallback: jobStore lost but noteId may still have package on disk
           if (jobContext.noteId) {
             try {
-              const packageData = await fetchJson("/api/nail/notes/" + encodeURIComponent(jobContext.noteId) + "/package");
+              const packageData = await fetchJson(buildVerticalPackageUrl(jobContext.noteId));
               if (packageData && packageData.pages && packageData.pages.length > 0) {
                 applyStatus("restored");
                 resultMeta.textContent = "上次任务记录已过期，但已根据结果包恢复内容。";
                 renderPackage(packageData, jobContext.generateImages, { job_id: jobContext.jobId, status: "restored", note_id: jobContext.noteId, error: null });
-                setJobMeta({
-                  note: "从结果包恢复",
-                  job_id: jobContext.jobId,
-                  note_id: jobContext.noteId,
-                  status: "restored",
-                });
+                setJobMeta(
+                  buildJobMetaPayload(
+                    { job_id: jobContext.jobId, note_id: jobContext.noteId, status: "restored" },
+                    { note: "从结果包恢复" }
+                  )
+                );
                 upsertRecentJob({
                   jobId: jobContext.jobId,
                   noteId: jobContext.noteId,
@@ -759,12 +1875,26 @@
           clearLastJob();
           applyStatus("failed", "无法找到上次任务");
           resultMeta.textContent = "无法找到上次任务，可能已过期或被清除。";
-          setJobMeta({ error: formatError(error), note: "任务不存在或已失效" });
+          setJobMeta(buildJobMetaPayload({}, { error: formatError(error), note: "任务不存在或已失效" }));
           hideResumePanel();
         } else {
-          applyStatus("failed", "暂时无法查询任务");
+          applyStatus("failed", "暂时无法查询任务", {
+            failed_stage: "job_query",
+            error_summary: formatError(error),
+          });
           resultMeta.textContent = "暂时无法查询任务，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。";
-          setJobMeta({ error: formatError(error), url: error.url || null, status: error.status || null });
+          setJobMeta(
+            buildJobMetaPayload(
+              {},
+              {
+                error: formatError(error),
+                url: error.url || null,
+                status: error.status || null,
+                failed_stage: "job_query",
+                error_summary: formatError(error),
+              }
+            )
+          );
           // keep resume panel open so user can retry
         }
       } finally {
@@ -790,7 +1920,86 @@
     }
   });
 
+  if (verticalField) {
+    verticalField.addEventListener("change", async function () {
+      const nextVertical = verticalField.value;
+      if (!nextVertical || nextVertical === selectedVertical) {
+        return;
+      }
+      updateCurrentVerticalState(nextVertical);
+      initializeFormOptions();
+      clearCaseSelection();
+      clearReferenceImage({ preserveCaseSelection: true });
+      await loadCaseLibrary();
+      await loadServerHistory();
+    });
+  }
+
+  if (caseIdField) {
+    caseIdField.addEventListener("input", function () {
+      const typed = caseIdField.value.trim();
+      if (!typed) {
+        clearCaseSelection({ preserveInput: true });
+        return;
+      }
+      if (selectedCase && selectedCase.case_id === typed) {
+        return;
+      }
+      selectedCase = null;
+      renderSelectedCasePanel();
+      renderCaseLibrary();
+      if (currentReferenceImage) {
+        clearReferenceImage({ preserveCaseSelection: true });
+      }
+    });
+  }
+
+  if (clearCaseButton) {
+    clearCaseButton.addEventListener("click", function () {
+      clearCaseSelection();
+    });
+  }
+
   styleField.addEventListener("change", updateStyleHelper);
+  if (refreshHistoryButton) {
+    refreshHistoryButton.addEventListener("click", async function () {
+      await loadServerHistory();
+    });
+  }
+  if (historySearchInput) {
+    historySearchInput.addEventListener("input", function () {
+      loadServerHistory();
+    });
+  }
+  if (historyHasPackageFilter) {
+    historyHasPackageFilter.addEventListener("change", function () {
+      loadServerHistory();
+    });
+  }
+  if (historySortSelect) {
+    historySortSelect.addEventListener("change", function () {
+      loadServerHistory();
+    });
+  }
+  if (bulkSelectAllCheckbox) {
+    bulkSelectAllCheckbox.addEventListener("change", function () {
+      if (this.checked) {
+        serverHistoryItems.forEach(function (item) {
+          if (item.note_id) selectedNoteIds.add(item.note_id);
+        });
+      } else {
+        selectedNoteIds.clear();
+      }
+      // Re-render history list to reflect checkbox states
+      renderServerHistory();
+      updateBulkDeleteButton();
+    });
+  }
+  if (bulkDeleteButton) {
+    bulkDeleteButton.addEventListener("click", function () {
+      bulkDeleteSelectedNotes();
+    });
+  }
   continueButton.addEventListener("click", function () {
     const storedJob = loadLastJob();
     if (!storedJob) {
@@ -813,8 +2022,24 @@
     submitButton.disabled = true;
     submitButton.textContent = "生成中...";
 
+    previewState = "generating";
+    previewFailedSummary = null;
+    resultMeta.textContent = "正在生成内容预览，请稍候...";
+
     const generateImages = enableImagesField.checked;
     const caseIdValue = caseIdField && caseIdField.value ? caseIdField.value.trim() : "";
+    let referenceSource = "none";
+    let referenceImagePath;
+    let effectiveCaseId;
+
+    if (caseIdValue) {
+      referenceSource = "case_id";
+      effectiveCaseId = caseIdValue;
+    } else if (currentReferenceImage && currentReferenceImage.path) {
+      referenceSource = "local_path";
+      referenceImagePath = currentReferenceImage.path;
+    }
+
     const payload = sanitizePayload({
       brief: briefField.value,
       style_id: styleField.value,
@@ -822,13 +2047,14 @@
       nail_length: nailLengthField.value,
       generate_images: generateImages,
       max_workers: Number(maxWorkersField.value || "1"),
-      reference_image_path: currentReferenceImage ? currentReferenceImage.path : undefined,
-      case_id: caseIdValue || undefined,
+      reference_source: referenceSource,
+      reference_image_path: referenceImagePath,
+      case_id: effectiveCaseId,
     });
 
     try {
       applyStatus("queued");
-      setJobMeta(payload);
+      setJobMeta(buildJobMetaPayload({}, payload));
 
       const created = await fetchJson("/api/nail/notes", {
         method: "POST",
@@ -836,8 +2062,11 @@
         body: JSON.stringify(payload),
       });
 
-      applyStatus("queued", "已提交，等待开始");
-      setJobMeta({ job_id: created.job_id, payload: payload });
+      applyStatus("queued", "已提交，等待开始", {
+        stage: "queued",
+        payload: payload,
+      });
+      setJobMeta(buildJobMetaPayload({ job_id: created.job_id, status: "queued", stage: "queued", payload: payload }));
       addRecentJob({
         jobId: created.job_id,
         noteId: null,
@@ -853,11 +2082,15 @@
         generateImages: generateImages,
       });
 
+      const submitToken = ++activeJobToken;
       const result = await pollJob(created.job_id, generateImages);
+      if (result.kind === "cancelled" || submitToken !== activeJobToken) {
+        return;
+      }
       if (result.kind === "timeout") {
-        applyStatus("timeout");
+        applyStatus("timeout", null, { stage: "workflow_running" });
         resultMeta.textContent = "生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。";
-        setJobMeta({ job_id: created.job_id, status: "timeout" });
+        setJobMeta(buildJobMetaPayload({ job_id: created.job_id, status: "timeout" }));
         showResumePanel("生成时间较长，任务可能仍在后台继续运行。你可以稍后点击「继续查询」查看结果。");
         return;
       }
@@ -865,23 +2098,34 @@
       if (result.kind === "failed") {
         const job = result.job;
         const finalStatus = job && job.status === "partial_failed" ? "partial_failed" : "failed";
+        if (submitToken !== activeJobToken) {
+          return;
+        }
         if (finalStatus === "partial_failed" && job && job.note_id) {
           await tryRenderPartialFailedJob(job, generateImages);
         } else {
-          applyStatus(finalStatus);
+          applyStatus(finalStatus, null, job);
+          previewState = "failed";
+          previewFailedSummary = (job && job.error_summary) ? job.error_summary : null;
           resultMeta.textContent = finalStatus === "partial_failed"
             ? "这次任务只完成了部分内容，可以先看已有结果，再决定是否重新生成。"
             : "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
-          setJobMeta(job || { job_id: created.job_id, status: finalStatus });
+          setJobMeta(buildJobMetaPayload(job || { job_id: created.job_id, status: finalStatus }));
         }
         return;
       }
 
+      if (submitToken !== activeJobToken) {
+        return;
+      }
       await renderSucceededJob(result.job, generateImages);
     } catch (error) {
-      applyStatus("failed", "生成失败");
+      applyStatus("failed", "生成失败", {
+        failed_stage: "job_create",
+        error_summary: formatError(error),
+      });
       resultMeta.textContent = "这次生成没有完成。你可以修改内容需求后重试，技术错误已保留在开发信息里。";
-      setJobMeta({ error: formatError(error) });
+      setJobMeta(buildJobMetaPayload({}, { error: formatError(error), failed_stage: "job_create", error_summary: formatError(error) }));
     } finally {
       submitButton.disabled = false;
       submitButton.textContent = "生成内容预览";
@@ -904,12 +2148,16 @@
     refPreviewImg.src = previewUrl;
   }
 
-  function clearReferenceImage() {
+  function clearReferenceImage(options) {
+    const settings = options || {};
     currentReferenceImage = null;
     refPreview.hidden = true;
     refPlaceholder.hidden = false;
     refPreviewImg.src = "";
     if (refInput) refInput.value = "";
+    if (!settings.preserveCaseSelection) {
+      renderCaseLibrary();
+    }
   }
 
   if (refRemoveBtn) {
@@ -947,7 +2195,8 @@
     formData.append("file", file);
 
     try {
-      const resp = await fetch("/api/nail/assets/reference-image", {
+      const vertical = encodeURIComponent(selectedVertical || APP_CONFIG.currentVertical);
+      const resp = await fetch("/api/verticals/" + vertical + "/reference-images", {
         method: "POST",
         body: formData,
       });
@@ -959,6 +2208,9 @@
         path: data.reference_image_path,
         previewUrl: data.preview_url,
       };
+      if (selectedCase || (caseIdField && caseIdField.value.trim())) {
+        clearCaseSelection();
+      }
       showReferencePreview(data.preview_url);
     } catch (err) {
       alert("上传失败：" + formatError(err));
@@ -973,9 +2225,6 @@
       await uploadReferenceFile(file);
     });
   }
-
-  // --- Case ID ---
-  const caseIdField = document.getElementById("case_id");
 
   // --- Recent jobs (localStorage) ---
   const RECENT_JOBS_KEY = "nail_studio_recent_jobs";
@@ -1068,16 +2317,35 @@
     renderRecentJobs();
   }
 
-  initializeFormOptions();
-  clearResults();
-  applyStatus("idle");
-  loadRecentJobs();
-  const storedJob = loadLastJob();
-  if (storedJob && storedJob.jobId) {
-    setJobMeta(storedJob);
-    showResumePanel("发现上次任务，是否继续查看？");
-    resultMeta.textContent = "如果你上次的任务已经跑完，可以直接继续查询并恢复内容预览。";
+  async function initializeApp() {
+    initializeFormOptions();
+    clearResults();
+    applyStatus("idle");
+    if (recentJobsTitle) {
+      recentJobsTitle.textContent = "最近任务快捷入口";
+    }
+    loadRecentJobs();
+    const storedJob = loadLastJob();
+    if (storedJob && storedJob.jobId) {
+      setJobMeta(storedJob);
+      showResumePanel("发现上次任务，是否继续查看？");
+      resultMeta.textContent = "如果你上次的任务已经跑完，可以直接继续查询并恢复内容预览。";
+    }
+    try {
+      await loadVerticalOptions();
+      await loadCaseLibrary();
+      await loadServerHistory();
+    } catch (error) {
+      setJobMeta({
+        note: "vertical bootstrap failed",
+        status: error.status || null,
+        url: error.url || null,
+        error: formatError(error),
+      });
+    }
   }
+
+  initializeApp();
 
   window.__nailStudioDebug = function () {
     return {

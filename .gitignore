@@ -47,4 +47,5 @@ logs/
 # Optional generated case data
 case_library/images/
 case_library/*.json
+case_library/poster/*/image.png
 _local_backups/

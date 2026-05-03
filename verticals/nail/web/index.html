@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vertical Content Studio</title>
-    <link rel="stylesheet" href="/web/style.css?v=20260430b" />
-    <script defer src="/web/app.js?v=20260430b"></script>
+    <link rel="stylesheet" href="/web/style.css?v=20260430c" />
+    <script defer src="/web/app.js?v=20260430c"></script>
   </head>
   <body>
     <main class="shell">
@@ -16,7 +16,7 @@
           <p class="hero-subtitle">输入一个内容需求，生成适合发布的标题、正文、标签和多页内容结构</p>
         </div>
         <div class="hero-badges">
-          <span class="hero-badge">当前内容场景 · 小红书美甲图文</span>
+          <span id="current-vertical-badge" class="hero-badge">当前内容场景 · 小红书美甲图文</span>
           <span class="hero-badge hero-badge-soft">快速预览 · 不消耗图片额度</span>
         </div>
       </header>
@@ -41,7 +41,7 @@
             </div>
 
             <div id="recent-jobs-panel" class="recent-jobs-panel" hidden>
-              <p class="recent-jobs-title">最近任务</p>
+              <p id="recent-jobs-title" class="recent-jobs-title">最近任务快捷入口</p>
               <div id="recent-jobs-list" class="recent-jobs-list" hidden></div>
             </div>
 
@@ -62,7 +62,7 @@
 
             <label class="field">
               <span>内容场景</span>
-              <select id="vertical" name="vertical" disabled>
+              <select id="vertical" name="vertical">
                 <option value="nail">小红书美甲图文</option>
               </select>
             </label>
@@ -132,6 +132,28 @@
                   <input id="case_id" name="case_id" type="text" placeholder="例如：case_001" class="text-input" />
                   <p class="field-help">如果你有历史案例 ID，可以填入后复用它的风格方向。</p>
                 </div>
+
+                <div id="selected-case-panel" class="resume-panel resume-panel-inline" hidden>
+                  <p id="selected-case-text" class="resume-text">已选择案例</p>
+                  <div class="resume-actions">
+                    <button id="clear-case-button" type="button" class="ghost-button">清除案例</button>
+                  </div>
+                </div>
+
+                <section id="case-library-panel" class="recent-jobs-panel">
+                  <div class="section-head">
+                    <div>
+                      <p class="eyebrow">Cases</p>
+                      <h2>案例库</h2>
+                    </div>
+                  </div>
+                  <p id="case-library-meta" class="section-tip">选择一个已有案例后，Studio 会按案例风格方向继续生成。</p>
+                  <div id="case-library-empty" class="empty-state">
+                    <strong>还没有可用案例</strong>
+                    <p>当当前内容场景存在可复用案例时，这里会显示可直接选择的案例卡片。</p>
+                  </div>
+                  <div id="case-library-list" class="recent-jobs-list" hidden></div>
+                </section>
               </div>
             </details>
 
@@ -165,6 +187,41 @@
             <summary>开发信息</summary>
             <pre id="job-meta" class="code-block">任务开始后，这里会显示任务编号和技术信息。</pre>
           </details>
+
+          <section id="history-panel" class="recent-jobs-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">History</p>
+                <h2>历史内容</h2>
+              </div>
+              <button id="refresh-history-button" type="button" class="ghost-button">刷新历史</button>
+            </div>
+            <p id="history-meta" class="section-tip">这里显示服务端历史内容，点击后会回放到下方内容预览区。</p>
+            <div id="history-filter-bar" class="filter-bar" hidden>
+              <input id="history-search-input" type="text" placeholder="搜索 note_id 或标题..." class="filter-search-input" />
+              <select id="history-has-package-filter" class="filter-select">
+                <option value="all">全部记录</option>
+                <option value="true">有结果包</option>
+                <option value="false">无结果包</option>
+              </select>
+              <select id="history-sort-select" class="filter-select">
+                <option value="created_at_desc">最新在前</option>
+                <option value="created_at_asc">最旧在前</option>
+              </select>
+            </div>
+            <div id="history-bulk-actions" class="history-bulk-actions" hidden>
+              <label class="bulk-select-all">
+                <input id="bulk-select-all-checkbox" type="checkbox" />
+                <span>全选</span>
+              </label>
+              <button id="bulk-delete-button" type="button" class="secondary-button history-bulk-delete-button" disabled>批量删除</button>
+            </div>
+            <div id="history-empty" class="empty-state">
+              <strong>还没有历史内容</strong>
+              <p>当服务端存在历史 package 时，这里会显示可回放的记录。</p>
+            </div>
+            <div id="history-list" class="recent-jobs-list" hidden></div>
+          </section>
 
           <section id="result-section" class="result-section">
             <div class="section-head">
