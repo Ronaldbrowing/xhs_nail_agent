@@ -12,6 +12,15 @@ _JOB_STORE_PATH = OUTPUT_DIR / "nail_jobs.json"
 _LOCK = threading.RLock()
 
 
+def _load() -> None:
+    """Restore _JOBS from persistent storage on module init."""
+    if _JOB_STORE_PATH.exists():
+        with open(_JOB_STORE_PATH, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+            if isinstance(loaded, dict):
+                _JOBS.update(loaded)
+
+
 def _persist() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     with open(_JOB_STORE_PATH, "w", encoding="utf-8") as handle:
@@ -84,3 +93,7 @@ def reset_jobs() -> None:
         _JOBS.clear()
         if _JOB_STORE_PATH.exists():
             _JOB_STORE_PATH.unlink()
+
+
+# Restore _JOBS from persistent storage on module import
+_load()
