@@ -1,0 +1,16 @@
+{
+  "case_id": "case_024",
+  "task": "poster",
+  "created_at": "2026-04-29T01:17:20.981964",
+  "image_path": "case_library/poster/case_024_春日限定樱花冰透美甲/image.png",
+  "brief": "春日限定樱花冰透美甲",
+  "prompt": "Create a poster image for poster aimed at broad professional audience. Treat this as a design-led visual solving this brief: 春日限定樱花冰透美甲\n\n【参考图DNA摘要】\n请参考历史案例的视觉 DNA，但不要机械复制原图。\n历史案例主题：未记录\n风格关键词：历史案例中的视觉风格、构图逻辑和质感表达\n任务类型参考：poster\n画面比例参考：未记录\n设计方向参考：未记录\n历史评分参考：0\n继承重点：配色逻辑、材质质感、画面氛围、主体呈现方式、构图留白。\n变化要求：根据当前新需求重新生成，不要一比一复刻历史案例。. Communication goal: attract and persuade quickly in a campaign or recruitment context. Translate the brief into one strong hero concept rather than many equal-weight elements. Brand and context strategy: no explicit brand provided; commit to one coherent visual system instead of averaging styles. Visual system: base mode: editorial campaign key visual; direction bias: larger scale, more dramatic, more surprising, high-contrast; energy bias: ambitious, high-energy, assertive, vivid; composition bias: bolder crop, stronger scale contrast, more motion cues, still disciplined; palette bias: higher-contrast palette with strong accent energy. Hierarchy: one clear hero idea; one dominant hero visual or symbolic concept, never a collage of equal-weight objects; secondary elements must support the hero rather than compete with it; background should create rhythm, not narrative confusion. Composition: bolder crop, stronger scale contrast, more motion cues, still disciplined. Safe zone: reserve a clean, obvious text-safe zone in the upper third or one side for headline and CTA copy. Lighting: crisp premium lighting with controlled contrast and energetic highlights. Color strategy: restricted premium palette with disciplined neutrals and one energetic accent family. Detail density: high-impact hero detail, expressive texture, controlled spectacle; hero-rich detail with restrained background complexity. Style direction: base mode: editorial campaign key visual; direction bias: larger scale, more dramatic, more surprising, high-contrast; energy bias: ambitious, high-energy, assertive, vivid; composition bias: bolder crop, stronger scale contrast, more motion cues, still disciplined; palette bias: higher-contrast palette with strong accent energy. Mood: ambitious, high-energy, assertive, vivid. Aspect ratio: 3:4. Important constraints: make the result feel campaign-ready rather than generic AI art; prioritize focal hierarchy and typography-safe composition. Avoid: avoid generic AI clutter; avoid random floating UI fragments or HUD overlays; avoid generic gradient fog with no composition logic; avoid cheap neon cyberpunk treatment unless explicitly requested; avoid noisy micro-detail that weakens the hierarchy; poster text rendered directly into the image unless explicitly requested; random marketing icons and decorative interface fragments. Emphasize strong hierarchy, intentional whitespace, disciplined background complexity, and polished professional finish.",
+  "params": {
+    "task": "poster",
+    "direction": "bold",
+    "aspect": "3:4",
+    "quality": "final"
+  },
+  "tags": [],
+  "rating": 9.0
+}
