@@ -2,6 +2,7 @@
 Tests for GET /api/verticals/{vertical}/notes/{note_id}/package endpoint.
 """
 import json
+import urllib.parse
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -119,5 +120,7 @@ class TestGetNotePackage:
         assert resp.status_code in (400, 404)
 
     def test_invalid_note_id_format_returns_4xx(self, client):
-        resp = client.get("/api/verticals/nail/notes/invalid@note#id/package")
+        # Pre-encode the path to avoid TestClient URL-encoding issues with @ and # characters
+        path = urllib.parse.quote("/api/verticals/nail/notes/invalid@note#id/package", safe="/")
+        resp = client.get(path)
         assert resp.status_code in (400, 404)
