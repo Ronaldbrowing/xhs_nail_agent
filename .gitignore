@@ -65,3 +65,4 @@ examples/
 
 # Workspace agent config
 AGENTS.md
+.gstack/
