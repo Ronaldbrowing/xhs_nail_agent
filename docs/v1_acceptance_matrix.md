@@ -27,7 +27,7 @@
 | FR-009 | 静态资源访问 | 访问 output 图片、input 参考图、case preview 图片；路径安全校验；不得返回本地绝对路径；不得允许路径穿越 | N/A（静态文件服务） | Preview/参考图 | Static File Server | Milestone 1 | P1 | 已覆盖 | 图片 URL 可打开；路径穿越被拒绝 | 已完成 | `static/output`、`static/input`、cases `preview_url` / `preview-image` 已打通；unknown vertical / unknown case / case 无图均返回 4xx，不允许路径穿越或任意文件读取 |
 | FR-010 | 错误处理与恢复 | 结构化错误码；job 404 时尝试 package fallback；partial_failed 展示成功部分；网络错误允许重试 | N/A（错误处理） | Progress/Preview | Job Store/Package Service | Milestone 3 | P1 | 已覆盖 | 失败任务展示错误原因和阶段；可 fallback 恢复 | 已完成 | 已实现 job 404→package fallback、`partial_failed` 保留可用结果并返回 `error_summary`；前端 Progress/Debug 会显示 `failed_stage` 与 `error_summary`，History replay 不会被 active job 状态覆盖 |
 | FR-011 | 安全渲染与输入校验 | 前端不得使用 innerHTML 渲染用户可控内容；上传文件校验类型和大小；跨 vertical case_id 校验；package 接口路径安全校验 | N/A（安全校验） | All | All | Milestone 1 | P0 | 已覆盖 | innerHTML 不用于渲染用户可控内容；文件上传校验生效 | 已完成 | History/package/recent jobs 的动态文本已改为安全渲染；上传接口校验类型/大小；unknown vertical 不 fallback 到 nail；case_id 与 vertical 匹配校验和 package 路径安全均已落地 |
-| FR-012 | note_package 标准化 | note_package.json 必须包含 content_platform、content_type、vertical；旧 package 可 fallback 推断 | N/A（数据模型） | N/A | Package Writer | Milestone 1 | P0 | 待开发 | 新生成 package 包含三个字段；旧 package fallback 推断 | 待开发 | 当前 package 缺少 content_platform、content_type、vertical |
+| FR-012 | note_package 标准化 | note_package.json 必须包含 content_platform、content_type、vertical；旧 package 可 fallback 推断 | N/A（数据模型） | N/A | Package Writer | Milestone 1 | P0 | 已覆盖 | 新生成 package 包含三个字段；旧 package fallback 推断 | 已完成 | content_platform、content_type、vertical 字段已添加到 schema 和 write path；相关 commit: 7711985 |
 | FR-013 | 垂类适配器与工作流分发 | 通过 vertical registry/adapter 查找对应 workflow；新增 vertical 时不复制整套系统 | N/A（架构） | N/A | Vertical Adapter | Milestone 2 | P1 | N/A | 新增 vertical 只需新增 registry/adapter 配置 | 待开发 | 架构设计阶段，尚未实现 |
 | FR-014 | 前端垂类状态管理 | 前端状态包含 selectedVertical；UI 显示 content_platform、content_type、vertical；不再将文案写死为"美甲" | N/A（前端状态） | Studio/All | N/A | Milestone 2 | P1 | 已覆盖 | 页面显示当前 vertical；切换 vertical 时状态同步 | 部分满足 | `selectedVertical` 已由 `/api/verticals` 驱动，History/Cases/上传接口会随 vertical 变化；当前 UI 仍以 nail 为唯一已启用 vertical，内容类型与平台展示未完全抽象 |
 | FR-015 | 兼容旧接口与旧数据 | 旧 /api/nail/... 作为兼容层保留；旧 package fallback 推断 vertical；兼容层不得绕过新安全规则 | /api/nail/... 兼容层 | N/A | 兼容适配层 | Milestone 1 | P1 | 已覆盖 | 旧接口仍可工作；旧数据可 fallback | 部分满足 | 旧 `/api/nail/...` 与新 vertical 历史/package API 当前并存，兼容层仍需在后续统一梳理 |
@@ -100,6 +100,9 @@
 | 2026-05-03 | Codex/Hermes | M6 Slice B2 完成：History 每条 item 左侧 checkbox + selectedNoteIds Set + 全选/取消全选 + 批量删除按钮 + confirm + reload 策略；checkbox 不影响回放/导出/单条删除；Frontend smoke 12/12 通过；相关 commit: 197f554 |
 | 2026-05-03 | Codex/Hermes | M6 Slice B3 完成：FR-023 History 批量删除验收矩阵更新完成；M6 Slice B 全部 Closed |
 | 2026-05-03 | Codex/Hermes | v1.1 Slice B 完成：FR-024 History 元数据增强（created_at Hybrid + has_body/has_images/package_status + frontend guards）；相关 commits: (待填) |
+| 2026-05-03 | Codex/Hermes | FR-012 note_package 标准化完成：content_platform、content_type、vertical 字段已添加到 schema 和 write path；commit: 7711985 |
+| 2026-05-03 | Codex/Hermes | Pagination 完成：limit/offset query params 添加到 GET /api/verticals/{vertical}/notes；test_invalid_note_id_format_returns_4xx URL encoding fix；相关 commits: 518f678, 4ff0daf |
+| 2026-05-03 | Codex/Hermes | 依赖更新：requests + openai 已添加到 requirements.txt；commit: 442bb44 |
 
 ---
 
