@@ -75,12 +75,16 @@ class HistoryListResponse(BaseModel if "BaseModel" in dir() else object):
 
 
 @router.get("/api/verticals/{vertical}/notes")
-def list_notes(vertical: str, search: Optional[str] = None, has_package: Optional[str] = None, sort: Optional[str] = None):
-    """Return服务端历史列表，按 vertical 过滤，支持搜索、过滤、排序。"""
+def list_notes(vertical: str, search: Optional[str] = None, has_package: Optional[str] = None, sort: Optional[str] = None, limit: Optional[int] = None, offset: Optional[int] = None):
+    """Return服务端历史列表，按 vertical 过滤，支持搜索、过滤、排序、分页。"""
     _require_vertical(vertical)
     svc = _get_history_service()
     items = svc.list_notes(vertical, search=search, has_package=has_package, sort=sort)
     total = len(items)
+    if offset is not None:
+        items = items[offset:]
+    if limit is not None:
+        items = items[:limit]
     return JSONResponse(content={"items": items, "total": total, "vertical": vertical})
 
 
